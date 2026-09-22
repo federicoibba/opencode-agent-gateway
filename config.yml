@@ -1,5 +1,13 @@
 # yaml-language-server: $schema=https://agentgateway.dev/schema/config
 
+config:
+  # The admin UI listens on loopback only by default, which is unreachable through
+  # a Docker port mapping (Docker connects to the container's network IP, not its
+  # loopback). Bind all interfaces inside the container so the published port works;
+  # docker-compose publishes it on host loopback only.
+  # Startup-only setting: changing it requires a container restart.
+  adminAddr: "0.0.0.0:15000"
+
 llm:
   port: 3000
 

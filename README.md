@@ -194,6 +194,7 @@ Priority order, first match wins (`coalesce` swallows errors from earlier branch
 
 | Field | Meaning |
 |---|---|
+| `config.adminAddr` | Admin UI bind address. Set to `0.0.0.0:15000` so the Docker port mapping can reach it (startup-only; restart after changing). |
 | `llm.port` | Port the OpenAI-compatible API is served on (container `3000`). |
 | `llm.providers[]` | Reusable provider definitions; referenced by `provider.reference`. |
 | `llm.models[].name` | The model name clients request (and that appears in `/v1/models`). |
@@ -250,14 +251,18 @@ The `Makefile` wraps the common commands: `make up`, `down`, `restart`, `logs`,
 | `error looking key 'OPENCODE_API_KEY' up` at startup | `.env` is missing or the variable is not set. Recreate with `docker compose up -d --force-recreate`. |
 | open-webui shows no models | Refresh the connection (Settings → Admin → Connections). Check the base URL is `http://agentgateway:3000/v1` and the key is non-empty (a placeholder is fine — the gateway substitutes the real one). |
 | open-webui still lists a stale `*` model | Hard-reload the page / click the connection's refresh icon; the list is cached client-side. |
+| `http://localhost:15000` won't load | The admin UI binds to loopback inside the container by default, which a Docker port mapping cannot reach. `config.adminAddr: "0.0.0.0:15000"` is set in `config.yml`; it is startup-only, so restart the container after changing it. |
 | Go returns `429` | A model hit its Go usage cap. Enable **Use balance** in the Zen console, or route around it (see `smart`). |
 
 ---
 
 ## Notes and limits
 
-- **Ports bind to localhost only** in this compose file — nothing is exposed
-  publicly. Put a reverse proxy in front if you need remote access.
+- **Published ports:** the admin UI (`15000`) is published on host loopback only
+  (`127.0.0.1:15000`) because it is unauthenticated. The LLM API (`3000`) and chat
+  UI (`3080`) are published on all interfaces; change them to
+  `127.0.0.1:3000:3000` / `127.0.0.1:3080:8080` in `docker-compose.yml` to restrict
+  them to this machine.
 - **The Go key lives only in the `agentgateway` container.** open-webui uses the
   literal key `placeholder`; the gateway replaces the auth header with the real key.
 - Go usage is capped **per model** on 5-hour / weekly / monthly buckets. See the

@@ -3,7 +3,8 @@ services:
     image: cr.agentgateway.dev/agentgateway:latest
     ports:
       - "3000:3000"
-      - "15000:15000"
+      # Admin UI: published on host loopback only (it is unauthenticated).
+      - "127.0.0.1:15000:15000"
     volumes:
       - ./config.yml:/config.yml:ro
     command: ["-f", "/config.yml"]
