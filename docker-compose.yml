@@ -6,7 +6,12 @@ services:
       # Admin UI: published on host loopback only (it is unauthenticated).
       - "127.0.0.1:15000:15000"
     volumes:
-      - ./config.yml:/config.yml:ro
+      # Read-write so the admin UI can save config changes back to the host file.
+      - ./config.yml:/config.yml
+      # SQLite request-log store behind the UI's Logs/Analytics pages.
+      # Must be a named volume, not a host bind mount: SQLite's locking/mmap
+      # is unreliable on Docker Desktop's macOS file sharing (disk I/O error 522).
+      - agentgateway-data:/data
     command: ["-f", "/config.yml"]
     environment:
       - OPENCODE_API_KEY=${OPENCODE_API_KEY}
@@ -30,3 +35,4 @@ services:
 
 volumes:
   open-webui:
+  agentgateway-data:

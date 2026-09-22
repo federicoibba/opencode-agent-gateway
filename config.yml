@@ -8,6 +8,19 @@ config:
   # Startup-only setting: changing it requires a container restart.
   adminAddr: "0.0.0.0:15000"
 
+  # Persistent store behind the UI's Logs, Analytics, and Costs pages. Setting
+  # this also makes agentgateway write access logs to the request_logs table
+  # automatically (config.logging.database is only needed for a separate store).
+  # Startup-only. Stored in the `agentgateway-data` Docker named volume.
+  database:
+    url: "sqlite:///data/agentgateway.db?mode=rwc"
+
+  # Logging. Startup-only: takes effect on restart, not hot-reload. Inspect with
+  # `make logs`; change the level live via http://localhost:15000/logging.
+  logging:
+    level: debug
+    format: json
+
 llm:
   port: 3000
 

@@ -20,7 +20,7 @@ Two containers:
 |---|---|---|
 | LLM API | `http://localhost:3000/v1` | OpenAI-compatible endpoint (`/models`, `/chat/completions`) |
 | Chat UI | `http://localhost:3080` | open-webui |
-| Admin / gateway UI | `http://localhost:15000/ui` | agentgateway admin, metrics, config inspection |
+| Admin / gateway UI | `http://localhost:15000/ui` | Edit config, view request Logs / Analytics / Costs, metrics |
 
 - One place for the OpenCode Go key — the browser and open-webui never see it.
 - The full list of Go models in the model picker, plus two aliases (`fast`, `smart`).
@@ -195,6 +195,9 @@ Priority order, first match wins (`coalesce` swallows errors from earlier branch
 | Field | Meaning |
 |---|---|
 | `config.adminAddr` | Admin UI bind address. Set to `0.0.0.0:15000` so the Docker port mapping can reach it (startup-only; restart after changing). |
+| `config.logging.level` | Log verbosity: `error`/`warn`/`info`/`debug`/`trace`, or per-module (`info,proxy::httpproxy=trace`). Set to `debug` here. Startup-only; change it live at `http://localhost:15000/logging`. |
+| `config.logging.format` | Log output format: `text` (default) or `json`. Set to `json` here. |
+| `config.database.url` | Database behind the UI's **Logs / Analytics / Costs** pages; setting it also persists access logs to a `request_logs` table. SQLite or PostgreSQL. Set to SQLite at `/data/agentgateway.db`. Startup-only. |
 | `llm.port` | Port the OpenAI-compatible API is served on (container `3000`). |
 | `llm.providers[]` | Reusable provider definitions; referenced by `provider.reference`. |
 | `llm.models[].name` | The model name clients request (and that appears in `/v1/models`). |
@@ -206,6 +209,22 @@ Priority order, first match wins (`coalesce` swallows errors from earlier branch
 **Add a model** — copy a line in the `models:` list, or add any Go model ID and
 restart/reload. **Add an alias** — add an entry under `virtualModels:` targeting
 existing model names.
+
+### Editing config
+
+`config.yml` is bind-mounted **read-write**, so you can edit it either way:
+
+- **On the host** — edit `config.yml` directly.
+- **In the admin UI** (`http://localhost:15000/ui`) — the UI writes changes back to
+  the same host file (this is why the mount is not `:ro`).
+
+How a change is applied depends on the section:
+
+- **`llm.*`** (models, providers, policies, virtual models) is **hot-reloaded** — no
+  restart. Watch for `loaded config from File("/config.yml")` in the logs.
+- **`config.*`** (`adminAddr`, `logging`, `database`, `tracing`, …) is
+  **startup-only** — it is read once at startup, so either restart
+  (`docker compose restart agentgateway`) or set the field before the first start.
 
 ### Environment variables
 
@@ -227,17 +246,24 @@ docker compose ps             # status
 docker compose logs -f agentgateway   # gateway logs (every request is logged)
 docker compose logs -f open-webui     # UI logs
 docker compose pull && docker compose up -d   # update images
-docker compose down           # stop (keeps the open-webui volume)
+docker compose down           # stop (keeps the open-webui and agentgateway-data volumes)
 ```
 
 The `Makefile` wraps the common commands: `make up`, `down`, `restart`, `logs`,
 `models`, `smoke`, `pull`, and `config` (`make help` lists them all).
 
-- **Config changes** to `config.yml` are **hot-reloaded** — no restart needed
-  (watch for `loaded config from File("/config.yml")` in the logs).
+- `config.yml` is mounted **read-write** and can be edited from the host or the
+  admin UI (see [Editing config](#editing-config)).
+- **`llm.*` changes** are **hot-reloaded** — no restart needed (watch for
+  `loaded config from File("/config.yml")` in the logs).
+- **`config.*` changes** (admin address, logging, database) are **startup-only** —
+  restart the container: `docker compose restart agentgateway`.
 - **Env var changes** require a restart: `docker compose up -d --force-recreate`.
 - open-webui data (accounts, chats, connection settings) lives in the
   `open-webui` named volume.
+- The gateway's request-log database (behind the UI Logs/Analytics pages) lives in
+  the `agentgateway-data` named volume. `docker compose down` keeps it;
+  `docker compose down -v` deletes it, along with the logs.
 
 ---
 
@@ -252,6 +278,9 @@ The `Makefile` wraps the common commands: `make up`, `down`, `restart`, `logs`,
 | open-webui shows no models | Refresh the connection (Settings → Admin → Connections). Check the base URL is `http://agentgateway:3000/v1` and the key is non-empty (a placeholder is fine — the gateway substitutes the real one). |
 | open-webui still lists a stale `*` model | Hard-reload the page / click the connection's refresh icon; the list is cached client-side. |
 | `http://localhost:15000` won't load | The admin UI binds to loopback inside the container by default, which a Docker port mapping cannot reach. `config.adminAddr: "0.0.0.0:15000"` is set in `config.yml`; it is startup-only, so restart the container after changing it. |
+| Admin UI save fails with `Read-only file system (os error 30)` | `config.yml` is mounted `:ro` in `docker-compose.yml`, so the UI cannot write back. Drop the `:ro` suffix (see [Editing config](#editing-config)). |
+| UI Logs page: `request log database is not configured` | No database is set. Add `config.database.url` (see [Editing config](#editing-config)) and restart. `config.logging.level`/`format` only affect the stdout stream, not the UI. |
+| UI Logs page: `disk I/O error (code: 522)` | The SQLite DB is on a Docker Desktop **bind mount**. Use a named volume (`agentgateway-data:/data`) instead — SQLite's locking/mmap is unreliable on macOS file sharing. |
 | Go returns `429` | A model hit its Go usage cap. Enable **Use balance** in the Zen console, or route around it (see `smart`). |
 
 ---
@@ -270,6 +299,15 @@ The `Makefile` wraps the common commands: `make up`, `down`, `restart`, `logs`,
 - Multimodal messages (content as a list) fall through to a random `uuid()`
   session, so they do not share a prompt cache. To keep those stable too, hash the
   first text part instead of the raw content in the `coalesce` chain.
+- **Do not open the request-log SQLite DB from the host while the gateway is
+  running.** Two writers across Docker Desktop's file sharing corrupt the WAL and
+  cause `disk I/O error (522)`. To inspect it, stop the gateway first and read the
+  `agentgateway-data` volume from a throwaway container.
+- **The Logs DB stores request metadata, not message content** (model, status,
+  tokens, duration, cost). To also capture prompts/completions, add
+  `frontendPolicies.accessLog.database.llm: full`.
+- **`config.logging.level: debug` is verbose** — it logs every SQL statement. Drop
+  to `info` for normal use (`curl -X POST "http://localhost:15000/logging?level=info"`).
 
 ---
 
@@ -280,7 +318,7 @@ The `Makefile` wraps the common commands: `make up`, `down`, `restart`, `logs`,
 ├── .env.example         # copy to .env and fill in
 ├── .gitignore
 ├── Makefile             # convenience targets (up, logs, models, smoke, ...)
-├── config.yml           # agentgateway config (provider, models, session policy)
+├── config.yml           # agentgateway config (provider, models, logging, database, session policy)
 ├── docker-compose.yml   # agentgateway + open-webui
 ├── docs/                # screenshots used by this README
 │   ├── connection-headers.png
@@ -295,6 +333,9 @@ The `Makefile` wraps the common commands: `make up`, `down`, `restart`, `logs`,
 - agentgateway docs — <https://agentgateway.dev/docs/standalone/latest/>
 - Custom LLM provider — <https://agentgateway.dev/docs/standalone/latest/integrations/llm/providers/custom/>
 - LLM request transformations — <https://agentgateway.dev/docs/standalone/latest/documentation/llm/transformations/>
+- Access logs to a database — <https://agentgateway.dev/docs/standalone/latest/documentation/observability/access-logs/database/>
+- Cost dashboard (UI) — <https://agentgateway.dev/docs/standalone/latest/documentation/llm/cost-controls/dashboard/>
+- Debugging (log levels) — <https://agentgateway.dev/docs/standalone/latest/documentation/operations/debug/>
 - CEL variables and functions — <https://agentgateway.dev/docs/standalone/latest/reference/cel/variables/>
 - Virtual models — <https://agentgateway.dev/docs/standalone/latest/documentation/llm/virtual-models/>
 - OpenCode Go — <https://opencode.ai/docs/go/>
