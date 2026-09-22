@@ -195,6 +195,7 @@ Priority order, first match wins (`coalesce` swallows errors from earlier branch
 | Field | Meaning |
 |---|---|
 | `config.adminAddr` | Admin UI bind address. Set to `0.0.0.0:15000` so the Docker port mapping can reach it (startup-only; restart after changing). |
+| `config.storage.mode` | How UI-managed config is persisted. `hybrid` (set here) keeps `config.yml` as the documented baseline and stores UI-created resources in the database, so the UI never rewrites the file. Alternatives: `file` (UI writes to the file — strips comments), `readOnly` (UI cannot write). Startup-only. |
 | `config.logging.level` | Log verbosity: `error`/`warn`/`info`/`debug`/`trace`, or per-module (`info,proxy::httpproxy=trace`). Set to `debug` here. Startup-only; change it live at `http://localhost:15000/logging`. |
 | `config.logging.format` | Log output format: `text` (default) or `json`. Set to `json` here. |
 | `config.database.url` | Database behind the UI's **Logs / Analytics / Costs** pages; setting it also persists access logs to a `request_logs` table. SQLite or PostgreSQL. Set to SQLite at `/data/agentgateway.db`. Startup-only. |
@@ -212,17 +213,21 @@ existing model names.
 
 ### Editing config
 
-`config.yml` is bind-mounted **read-write**, so you can edit it either way:
+`config.yml` is bind-mounted **read-write**, and `config.storage.mode: hybrid`
+keeps it as the documented baseline:
 
-- **On the host** — edit `config.yml` directly.
-- **In the admin UI** (`http://localhost:15000/ui`) — the UI writes changes back to
-  the same host file (this is why the mount is not `:ro`).
+- **On the host** — edit `config.yml` directly. It is the source of truth for
+  everything in it, comments included.
+- **In the admin UI** (`http://localhost:15000/ui`) — resources you create in the
+  UI are stored in the `agentgateway-data` database, not written back to this
+  file, so the file (and its comments) is never rewritten. (With the `file`
+  default, the UI rewrites `config.yml` and strips its comments.)
 
 How a change is applied depends on the section:
 
 - **`llm.*`** (models, providers, policies, virtual models) is **hot-reloaded** — no
   restart. Watch for `loaded config from File("/config.yml")` in the logs.
-- **`config.*`** (`adminAddr`, `logging`, `database`, `tracing`, …) is
+- **`config.*`** (`adminAddr`, `storage`, `logging`, `database`, `tracing`, …) is
   **startup-only** — it is read once at startup, so either restart
   (`docker compose restart agentgateway`) or set the field before the first start.
 
@@ -252,8 +257,9 @@ docker compose down           # stop (keeps the open-webui and agentgateway-data
 The `Makefile` wraps the common commands: `make up`, `down`, `restart`, `logs`,
 `models`, `smoke`, `pull`, and `config` (`make help` lists them all).
 
-- `config.yml` is mounted **read-write** and can be edited from the host or the
-  admin UI (see [Editing config](#editing-config)).
+- `config.yml` is mounted **read-write** and is edited on the host.
+  `config.storage.mode: hybrid` sends UI-created resources to the database, so the
+  file is never rewritten (see [Editing config](#editing-config)).
 - **`llm.*` changes** are **hot-reloaded** — no restart needed (watch for
   `loaded config from File("/config.yml")` in the logs).
 - **`config.*` changes** (admin address, logging, database) are **startup-only** —

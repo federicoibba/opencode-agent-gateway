@@ -8,6 +8,13 @@ config:
   # Startup-only setting: changing it requires a container restart.
   adminAddr: "0.0.0.0:15000"
 
+  # Persistence mode for UI-managed config. `hybrid` keeps this file as the
+  # documented baseline and stores resources created in the UI in the database,
+  # so the UI never rewrites (and never strips the comments from) this file.
+  # Startup-only.
+  storage:
+    mode: hybrid
+
   # Persistent store behind the UI's Logs, Analytics, and Costs pages. Setting
   # this also makes agentgateway write access logs to the request_logs table
   # automatically (config.logging.database is only needed for a separate store).
