@@ -1,4 +1,4 @@
-# agent-gateway
+# OpenCode Agent Gateway
 
 A self-hosted, OpenAI-compatible gateway in front of **OpenCode Go**, plus a chat
 UI. Point any OpenAI client at `http://localhost:3000/v1` and it is backed by your
