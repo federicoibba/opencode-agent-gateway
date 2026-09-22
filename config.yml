@@ -1,0 +1,137 @@
+# yaml-language-server: $schema=https://agentgateway.dev/schema/config
+
+llm:
+  port: 3000
+
+  providers:
+  - name: go
+    provider:
+      custom:
+        formats:
+          # OpenCode Go normalizes its whole catalog to OpenAI Chat Completions.
+          # With no `path`, requests go to <baseUrl>/chat/completions.
+          - type: completions
+    params:
+      apiKey: "$OPENCODE_API_KEY"
+      baseUrl: "https://opencode.ai/zen/go/v1"
+
+  models:
+  # Public, client-selectable Go models -- these are what appear in open-webui's
+  # model picker. Without explicit entries, the wildcard below is advertised as a
+  # model literally named "*", which open-webui sends to Go and Go rejects with
+  # "Upstream request failed: Model is unavailable."
+  - name: glm-5.3-flash
+    provider: &go
+      reference: go
+  - name: glm-5.3
+    provider: *go
+  - name: glm-5.2
+    provider: *go
+  - name: glm-5.1
+    provider: *go
+  - name: kimi-k3
+    provider: *go
+  - name: kimi-k2.7-code
+    provider: *go
+  - name: kimi-k2.6
+    provider: *go
+  - name: longcat-2.0
+    provider: *go
+  - name: deepseek-v4.1-flash
+    provider: *go
+  - name: deepseek-v4-pro
+    provider: *go
+  - name: deepseek-v4-flash
+    provider: *go
+  - name: deepseek-v4-flash-vision-exp
+    provider: *go
+  - name: mimo-v2.6-flash
+    provider: *go
+  - name: mimo-v2.6-pro
+    provider: *go
+  - name: mimo-v2.5
+    provider: *go
+  - name: mimo-v2.5-pro
+    provider: *go
+  - name: minimax-m3
+    provider: *go
+  - name: minimax-m2.7
+    provider: *go
+  - name: minimax-m2.5
+    provider: *go
+  - name: qwen3.8-max
+    provider: *go
+  - name: qwen3.8-flash
+    provider: *go
+  - name: qwen3.7-max
+    provider: *go
+  - name: qwen3.7-plus
+    provider: *go
+  - name: qwen3.6-plus
+    provider: *go
+  - name: grok-4.7
+    provider: *go
+  - name: grok-4.6
+    provider: *go
+  - name: gpt-5.6-luna
+    provider: *go
+  - name: hy4-preview
+    provider: *go
+  - name: hy3
+    provider: *go
+
+  # Catch-all. `visibility: internal` keeps it out of the model list and blocks
+  # direct requests (so clients can't select a literal "*"); it only backs virtual
+  # models that target an unlisted name.
+  - name: "*"
+    visibility: internal
+    provider: *go
+
+  policies:
+    transformations:
+      request:
+        set:
+          # OpenCode Go requires x-opencode-session or it returns
+          # "Request is missing x-opencode-session". The LLM translation path rebuilds
+          # the upstream request, so we must re-add the header here.
+          #
+          # Derive a per-conversation session ID, in priority order:
+          #   1) an explicit client header (orchestrator/agents, and open-webui once
+          #      its OpenAI connection sends `x-opencode-session: {{CHAT_ID}}`)
+          #   2) open-webui's built-in chat header
+          #   3) a chat_id carried in the request body
+          #   4) a stable hash of the FIRST user message (steady across turns because
+          #      history only appends) -- works for any client with zero config
+          #   5) uuid() only if the message content cannot be hashed (e.g. multimodal)
+          # `coalesce` returns the first value that resolves, swallowing errors from
+          # the earlier branches.
+          x-opencode-session: |
+            coalesce(
+              request.headers["x-opencode-session"],
+              request.headers["x-openwebui-chat-id"],
+              json(request.body).chat_id,
+              sha256.encode(string(json(request.body).messages.filter(m, m.role == "user")[0].content)),
+              uuid()
+            )
+          # Go also asks that clients identify with their own user agent.
+          User-Agent: '"agent-gateway/1.0"'
+
+  # Optional aliases from the build plan. `fast` spreads bulk sub-agent work,
+  # `smart` fails over across the workhorse/planner models.
+  virtualModels:
+  - name: fast
+    routing:
+      weighted:
+        targets:
+        - model: glm-5.3-flash
+          weight: 60
+        - model: mimo-v2.6-flash
+          weight: 40
+  - name: smart
+    routing:
+      failover:
+        targets:
+        - model: kimi-k2.7-code
+          priority: 0
+        - model: glm-5.2
+          priority: 1

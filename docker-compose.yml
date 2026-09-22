@@ -1,0 +1,31 @@
+services:
+  agentgateway:
+    image: cr.agentgateway.dev/agentgateway:latest
+    ports:
+      - "3000:3000"
+      - "15000:15000"
+    volumes:
+      - ./config.yml:/config.yml:ro
+    command: ["-f", "/config.yml"]
+    environment:
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY}
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    ports:
+      - "3080:8080"
+    environment:
+      # Client key toward the gateway; the gateway swaps in the real Go key.
+      - OPENAI_API_BASE_URL=http://agentgateway:3000/v1
+      - OPENAI_API_KEY=placeholder
+      # NOTE: for per-conversation session IDs, add this custom header on the
+      # OpenAI connection in Admin > Connections (persists in the data volume):
+      #   { "x-opencode-session": "{{CHAT_ID}}" }
+      # Without it the gateway still derives a per-chat ID from message content.
+    depends_on:
+      - agentgateway
+    volumes:
+      - open-webui:/app/backend/data
+
+volumes:
+  open-webui:
