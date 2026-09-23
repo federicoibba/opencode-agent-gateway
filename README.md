@@ -119,6 +119,47 @@ the first user message, so it works either way — the header just makes it exac
 
 ---
 
+## Workspaces (domains in the chat UI)
+
+The gateway is the shared infrastructure — providers, models and MCP servers
+declared in `config.yml`. A **workspace** is the other half: one domain
+(frontend, backend, …) bundled as plain Markdown and reconciled into open-webui's
+**Workspace**, so each domain shows up in the model picker as its own agent.
+
+```
+workspaces/frontend/
+├── workspace.md               # metadata + system instructions (the Model prompt)
+├── skills/accessibility-audit/SKILL.md
+├── skills/design-tokens/SKILL.md
+└── prompts/review-ui.md        # becomes /review-ui
+```
+
+`tools/workspace_sync.py` reads those files and upserts, per domain:
+
+- a **Model** preset (id = domain name) on top of `base_model`, with the system
+  instructions, the bound **Skills** and the MCP tool ids from `tools`;
+- one **Skill** per `skills/*/SKILL.md`, lazy-loaded by the model on demand;
+- one **Prompt** per `prompts/*.md`.
+
+It runs automatically on `docker compose up` (the one-shot `workspace-sync`
+service), so a fresh stack comes up with the domains already bundled in the UI.
+Re-run it after editing Markdown:
+
+```bash
+mise run workspaces        # dry-run: print the plan
+mise run sync-workspaces   # apply to open-webui
+```
+
+The sync authenticates from `.env` with either `WEBUI_ADMIN_EMAIL` +
+`WEBUI_ADMIN_PASSWORD` (which also creates the first admin headlessly on a fresh
+install) or an `OPENWEBUI_API_KEY`. Without either it exits 0 and changes
+nothing. Everything is upserted by id, so re-running is safe; `--prune` removes
+workspace-managed items that no longer exist in the repo.
+
+Full reference: [`workspaces/README.md`](workspaces/README.md).
+
+---
+
 ## How it works
 
 ### The provider
@@ -256,7 +297,8 @@ docker compose down           # stop (keeps the open-webui and agentgateway-data
 ```
 
 The `mise.toml` tasks wrap the common commands: `mise run up`, `down`, `restart`,
-`logs`, `models`, `smoke`, `pull`, and `config` (`mise tasks` lists them all).
+`logs`, `models`, `smoke`, `pull`, `config`, `sync-workspaces`, and `workspaces`
+(`mise tasks` lists them all).
 
 - `config.yml` is mounted **read-write** and is edited on the host.
   `config.storage.mode: hybrid` sends UI-created resources to the database, so the
@@ -324,9 +366,14 @@ The `mise.toml` tasks wrap the common commands: `mise run up`, `down`, `restart`
 .
 ├── .env.example         # copy to .env and fill in
 ├── .gitignore
-├── mise.toml            # task runner (up, logs, models, smoke, ...)
-├── config.yml           # agentgateway config (provider, models, logging, database, session policy)
-├── docker-compose.yml   # agentgateway + open-webui
+├── mise.toml            # task runner (up, logs, models, smoke, sync, ...)
+├── config.yml           # agentgateway config (provider, models, logging, database, session policy, MCP)
+├── docker-compose.yml   # agentgateway + open-webui + workspace-sync
+├── workspaces/          # domain bundles (Markdown) reconciled into open-webui
+│   ├── README.md
+│   └── frontend/        # example domain: instructions + skills + prompts
+├── tools/
+│   └── workspace_sync.py  # syncs workspaces/ into open-webui (stdlib only)
 ├── docs/                # screenshots used by this README
 │   ├── connection-headers.png
 │   └── connection-settings.png

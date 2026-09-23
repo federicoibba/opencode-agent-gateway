@@ -28,6 +28,13 @@ services:
       # Client key toward the gateway; the gateway swaps in the real Go key.
       - OPENAI_API_BASE_URL=http://agentgateway:3000/v1
       - OPENAI_API_KEY=placeholder
+      # Optional headless bootstrap of the first admin. When both are set on a
+      # fresh install, open-webui creates this account at startup and disables
+      # open sign-up, so `workspace-sync` can sign in and seed the workspaces
+      # without any manual step. Leave unset to create the admin in the UI and
+      # set OPENWEBUI_API_KEY instead (see .env.example).
+      - WEBUI_ADMIN_EMAIL=${WEBUI_ADMIN_EMAIL:-}
+      - WEBUI_ADMIN_PASSWORD=${WEBUI_ADMIN_PASSWORD:-}
       # Pre-wire the gateway's MCP endpoint as an external tool server so it shows
       # up in every chat (no manual Admin > Integrations step). open-webui treats
       # this as a persisted setting: it seeds from here only while no value is
@@ -48,6 +55,34 @@ services:
       - agentgateway
     volumes:
       - open-webui:/app/backend/data
+    healthcheck:
+      # Used by workspace-sync (depends_on: service_healthy) so it waits for the
+      # API to answer before it starts creating models/skills/prompts.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8080/health', timeout=5).status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  # One-shot: reconciles workspaces/<domain>/ in this repo into open-webui's
+  # Workspace (Models, Skills, Prompts). Runs on every `docker compose up`, is
+  # idempotent, and exits 0 (with a warning) when no credentials are configured.
+  # Re-run on demand with `mise run sync-workspaces` (docker compose run --rm workspace-sync).
+  workspace-sync:
+    image: python:3.14-slim
+    depends_on:
+      open-webui:
+        condition: service_healthy
+    volumes:
+      - ./workspaces:/workspaces:ro
+      - ./tools:/tools:ro
+    environment:
+      - OPENWEBUI_URL=http://open-webui:8080
+      - OPENWEBUI_API_KEY=${OPENWEBUI_API_KEY:-}
+      - WEBUI_ADMIN_EMAIL=${WEBUI_ADMIN_EMAIL:-}
+      - WEBUI_ADMIN_PASSWORD=${WEBUI_ADMIN_PASSWORD:-}
+    command: ["python", "/tools/workspace_sync.py", "--workspaces", "/workspaces", "--url", "http://open-webui:8080"]
+    restart: "no"
 
 volumes:
   open-webui:

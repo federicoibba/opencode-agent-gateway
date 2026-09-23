@@ -3,8 +3,9 @@
 #   mise tasks          # list tasks
 #   mise run <task>     # run one
 #
-# Always use `mise run <task>`; the bare shorthand (`mise up`, `mise config`)
-# collides with mise's own subcommands/aliases (upgrade, config).
+# Always use `mise run <task>`; the bare shorthand (`mise up`, `mise config`,
+# `mise sync`) collides with mise's own subcommands/aliases (upgrade, config,
+# sync), so task names here avoid the reserved ones.
 #
 # Toolchain: mise pins/installs Python, used by the `models`/`smoke` tasks.
 # Docker (engine + Compose) and curl are system-level and cannot be managed by
@@ -63,3 +64,12 @@ run = "docker compose pull && docker compose up -d"
 [tasks.config]
 description = "Validate config.yml and the compose file"
 run = "docker compose config --quiet && echo 'compose OK'"
+
+[tasks.workspaces]
+description = "Show the domain workspace plan without changing anything"
+run = "python3 tools/workspace_sync.py --dry-run"
+
+[tasks.sync-workspaces]
+description = "Reconcile workspaces/<domain>/ into open-webui (runs on `up` too)"
+run = "docker compose run --rm workspace-sync"
+
