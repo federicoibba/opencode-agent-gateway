@@ -31,16 +31,41 @@ Two containers:
 
 ## Architecture
 
+Two layers: the **gateway** is shared infrastructure, and the **workspaces** are
+per-domain agents built on top of it.
+
 ```
                  OpenAI-compatible HTTP
   open-webui  ───────────────────────────►  agentgateway  ──────────►  opencode.ai/zen/go/v1
   :3080                                     :3000 (LLM)                (OpenCode Go)
-  (browser)                                 :15000 (admin)
+  (browser)                                 :4000 (MCP)
+                                            :15000 (admin)
                                                  │
                                                  ├─ injects x-opencode-session
                                                  ├─ injects User-Agent
                                                  └─ holds OPENCODE_API_KEY
+
+  open-webui  ──── MCP tools ────►  agentgateway :4000  ────►  MCP servers (github, …)
 ```
+
+```
+  workspaces/<domain>/               workspace-sync                 open-webui Workspace
+    workspace.md      ─┐             (one-shot on `up`)        ┌─► Model  (instructions,
+    skills/*/SKILL.md ─┼────────────── reconciles ─────────────┤           skills, tools)
+    prompts/*.md      ─┘             + session header          └─► Folder (bound to the Model)
+```
+
+- **Gateway (shared).** The OpenCode Go connection — one API key, one model
+  catalog, one `x-opencode-session` policy — plus the MCP servers **every model**
+  can call (GitHub, …), multiplexed into a single endpoint on `:4000`. Both are
+  declared in `config.yml`.
+- **Workspaces (per domain).** Plain Markdown under `workspaces/<domain>/` —
+  instructions, skills and prompts — reconciled into an open-webui **Model** and
+  a **Folder** bound to it, so each domain is its own agent in the model picker
+  and its own place in the sidebar.
+- **`workspace-sync`** is the bridge: on every `up` it reads the repo, sets the
+  connection's session header, and upserts the models, skills, prompts and
+  folders to match.
 
 Any other OpenAI client (a script, an SDK, your own agent) can use
 `http://localhost:3000/v1` the same way.
