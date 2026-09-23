@@ -57,24 +57,42 @@ Any other OpenAI client (a script, an SDK, your own agent) can use
 
 ## Quick start
 
+Two equivalent paths — the `mise` tasks wrap the same `docker compose` commands.
+Pick one.
+
+### With mise
+
 ```bash
-# 1. Create your env file and add your Go API key
+mise install          # once: pins the Python used by the `models`/`smoke` tasks
 cp .env.example .env
-$EDITOR .env
+$EDITOR .env          # add your Go API key (OPENCODE_API_KEY)
 
-# 2. Start everything
+mise run up           # start the stack
+mise run models       # confirm the gateway sees your models
+```
+
+### Without mise
+
+```bash
+cp .env.example .env
+$EDITOR .env          # add your Go API key (OPENCODE_API_KEY)
+
 docker compose up -d
-
-# 3. Confirm the gateway sees your models
 curl -s http://localhost:3000/v1/models | jq -r '.data[].id'
 ```
 
 Then open the chat UI at <http://localhost:3080> (create the first admin account on
-first run) and finish the one-time open-webui step below.
+first run). To have the session header and the domain workspaces set up
+automatically on `up`, also set the workspace credentials in `.env` (see
+[Workspaces](#workspaces-domains-in-the-chat-ui)).
 
 ### Smoke test from the command line
 
 ```bash
+# with mise
+mise run smoke
+
+# without
 curl -s http://localhost:3000/v1/chat/completions \
   -H 'content-type: application/json' \
   -d '{"model":"glm-5.3-flash","max_tokens":32,
@@ -91,28 +109,34 @@ curl -s http://localhost:3000/v1/chat/completions \
 
 ---
 
-## One-time open-webui setup
+## The per-chat session header
 
-The connection is created by environment variables, but the **per-chat session
-header** must be added in the UI (open-webui has no env var for custom headers yet).
-It persists in the `open-webui` Docker volume.
+The gateway derives a stable session per conversation from an
+`x-opencode-session` header. **`workspace-sync` sets it for you** on open-webui's
+OpenAI connection, so there is nothing to do by hand:
 
-1. **Settings → Admin → Connections →** your OpenAI connection.
+```json
+{ "x-opencode-session": "{{CHAT_ID}}" }
+```
 
-   <img src="docs/connection-settings.png" alt="Settings → Connections" width="600">
+`{{CHAT_ID}}` is interpolated by open-webui per chat. The header lives on the
+connection in open-webui's database (the `open-webui` volume) and is re-applied
+on every `docker compose up`.
 
-2. Set **Custom headers** to:
+If you are not running the sync, set it manually — **Settings → Admin → Connections
+→** your OpenAI connection → **Custom headers**:
 
-   ```json
-   { "x-opencode-session": "{{CHAT_ID}}" }
-   ```
+<img src="docs/connection-settings.png" alt="Settings → Connections" width="600">
 
-   `{{CHAT_ID}}` is interpolated by open-webui per chat.
+set it to the JSON above, save, and click the connection's **refresh** icon so
+the model list is re-fetched:
 
-   <img src="docs/connection-headers.png" alt="Set header" width="420">
+<img src="docs/connection-headers.png" alt="Set header" width="420">
 
-3. Save, then click the **refresh** icon on the connection so the model list is
-   re-fetched.
+On a fresh install you can also seed it declaratively with open-webui's
+`OPENAI_API_CONFIGS` env var, e.g.
+`{"0":{"headers":{"x-opencode-session":"{{CHAT_ID}}"}}}` — but it is a persisted
+setting, so it is only read while no value is stored.
 
 Without this header the gateway still gives each chat its own session by hashing
 the first user message, so it works either way — the header just makes it exact.

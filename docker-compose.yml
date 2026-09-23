@@ -80,9 +80,10 @@ services:
       retries: 12
       start_period: 30s
 
-  # One-shot: reconciles workspaces/<domain>/ in this repo into open-webui's
-  # Workspace (Models, Skills, Prompts). Runs on every `docker compose up`, is
-  # idempotent, and exits 0 (with a warning) when no credentials are configured.
+  # One-shot: reconciles this repo into open-webui -- the gateway connection's
+  # per-chat session header, plus each workspaces/<domain>/ as a Model, Skills,
+  # Prompts and a bound Folder. Runs on every `docker compose up`, is idempotent,
+  # and exits 0 (with a warning) when no credentials are configured.
   # Re-run on demand with `mise run sync-workspaces` (docker compose run --rm workspace-sync).
   workspace-sync:
     image: python:3.14-slim

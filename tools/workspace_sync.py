@@ -3,7 +3,9 @@
 
 This repo is the source of truth for the *agent* side of the gateway. Each domain
 lives in ``workspaces/<domain>/`` as plain Markdown, and this script reconciles
-Open WebUI's Workspace (Models, Skills, Prompts) to match it.
+Open WebUI's Workspace (Models, Skills, Prompts, Folders) to match it. It also
+sets the per-chat session header on the gateway's OpenAI connection, replacing
+the manual one-time step in the UI.
 
 Layout of a domain::
 
@@ -42,6 +44,11 @@ import urllib.error
 import urllib.request
 
 TAG_PREFIX = "workspace:"
+# Custom header that gives the gateway a stable per-chat session. open-webui has
+# no env var that applies to an existing install, so the sync sets it on the
+# gateway's OpenAI connection through the admin API.
+GATEWAY_SESSION_HEADER = {"x-opencode-session": "{{CHAT_ID}}"}
+GATEWAY_CONNECTION_MATCH = "agentgateway"
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n?(.*)$", re.S)
 _KEY_RE = re.compile(r"^([A-Za-z0-9_.-]+):\s*(.*)$")
 
@@ -342,6 +349,52 @@ def sync_prompts(base, token, domains, existing, prune, summary):
                 report(summary, status, f"prompt /{command} (pruned)", body)
 
 
+def sync_gateway_connection(base, token, summary):
+    """Give the gateway's OpenAI connection the per-chat session header.
+
+    open-webui has no env var for per-connection custom headers that applies to
+    an existing install, so read the OpenAI connection config, merge
+    ``x-opencode-session: {{CHAT_ID}}`` into the matching connection's headers,
+    and write it back. Idempotent, and preserves any other headers/config.
+    """
+    status, cfg = http("GET", base, "/openai/config", token)
+    if status != 200 or not isinstance(cfg, dict):
+        summary["warnings"].append(
+            f"openai config unavailable ({status}); x-opencode-session not set"
+        )
+        return
+
+    urls = cfg.get("OPENAI_API_BASE_URLS") or []
+    configs = dict(cfg.get("OPENAI_API_CONFIGS") or {})
+    idx = next(
+        (i for i, url in enumerate(urls) if GATEWAY_CONNECTION_MATCH in (url or "")),
+        None,
+    )
+    if idx is None:
+        summary["warnings"].append(
+            f"no OpenAI connection matching '{GATEWAY_CONNECTION_MATCH}'; "
+            "x-opencode-session not set"
+        )
+        return
+
+    # Configs are stored by string index, but tolerate a URL key from older data.
+    key = str(idx)
+    connection = dict(configs.get(key) or configs.get(urls[idx]) or {})
+    headers = dict(connection.get("headers") or {})
+    headers.update(GATEWAY_SESSION_HEADER)
+    connection["headers"] = headers
+    configs[key] = connection
+
+    payload = {
+        "ENABLE_OPENAI_API": cfg.get("ENABLE_OPENAI_API"),
+        "OPENAI_API_BASE_URLS": urls,
+        "OPENAI_API_KEYS": cfg.get("OPENAI_API_KEYS") or [],
+        "OPENAI_API_CONFIGS": configs,
+    }
+    status, body = http("POST", base, "/openai/config/update", token, payload)
+    report(summary, status, "gateway connection header (x-opencode-session)", body)
+
+
 def sync_folders(base, token, domains, existing, summary):
     """Create one sidebar folder per workspace, bound to the workspace model.
 
@@ -440,6 +493,7 @@ def main():
     if args.dry_run:
         print(f"plan for {len(domains)} workspace(s):\n")
         print_plan(domains)
+        print("connection  : gateway -> x-opencode-session: {{CHAT_ID}}")
         return 0
 
     token = authenticate(args.url, args)
@@ -475,6 +529,7 @@ def main():
     existing_models = index_by(models, "id")
 
     summary = {"ok": [], "failed": [], "warnings": []}
+    sync_gateway_connection(args.url, token, summary)
     sync_skills(args.url, token, domains, existing_skills, args.prune, summary)
     sync_prompts(args.url, token, domains, existing_prompts, args.prune, summary)
     sync_folders(args.url, token, domains, existing_folders, summary)

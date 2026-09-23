@@ -4,7 +4,7 @@ description: Frontend engineering workspace for UI, accessibility and design sys
 base_model: smart
 tools: ["server:mcp:agentgateway"]
 tags: ["frontend", "ui", "design-system"]
-params: {"temperature": 0.3}
+params: {"temperature": 1}
 folder: Frontend
 ---
 

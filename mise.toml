@@ -88,6 +88,6 @@ description = "Show the domain workspace plan without changing anything"
 run = "python3 tools/workspace_sync.py --dry-run"
 
 [tasks.sync-workspaces]
-description = "Reconcile workspaces/<domain>/ into open-webui (runs on `up` too)"
+description = "Provision open-webui from this repo (session header + workspaces)"
 run = "docker compose run --rm workspace-sync"
 
