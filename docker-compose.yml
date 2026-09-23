@@ -5,6 +5,10 @@ services:
       - "3000:3000"
       # Admin UI: published on host loopback only (it is unauthenticated).
       - "127.0.0.1:15000:15000"
+      # MCP listener (config.yml `gateways.default` port 4000): loopback only,
+      # for the gateway UI's Tool Playground. open-webui reaches it over the
+      # compose network and does not need this mapping.
+      - "127.0.0.1:4000:4000"
     volumes:
       # Read-write so the admin UI can save config changes back to the host file.
       - ./config.yml:/config.yml
@@ -24,6 +28,18 @@ services:
       # Client key toward the gateway; the gateway swaps in the real Go key.
       - OPENAI_API_BASE_URL=http://agentgateway:3000/v1
       - OPENAI_API_KEY=placeholder
+      # Pre-wire the gateway's MCP endpoint as an external tool server so it shows
+      # up in every chat (no manual Admin > Integrations step). open-webui treats
+      # this as a persisted setting: it seeds from here only while no value is
+      # stored. To re-seed after changing it, delete the stored row:
+      #   delete from config where key='tool_server.connections';
+      # `path` is required by open-webui's ToolServerConnection model even for MCP
+      # (its config endpoint 500s without it, which makes the UI spin forever).
+      - 'TOOL_SERVER_CONNECTIONS=[{"type":"mcp","url":"http://agentgateway:4000/mcp","path":"","auth_type":"none","key":"","config":{"enable":true},"info":{"id":"agentgateway","name":"agentgateway MCP","description":"Tools exposed by the agentgateway MCP endpoint"}}]'
+      # Make the MCP server a default tool on every model, so a chat does not need
+      # the per-chat (or per-model editor) toggle. Same persisted-setting caveat as
+      # above: re-seed by deleting the stored row `models.default_metadata`.
+      - 'DEFAULT_MODEL_METADATA={"toolIds":["server:mcp:agentgateway"]}'
       # NOTE: for per-conversation session IDs, add this custom header on the
       # OpenAI connection in Admin > Connections (persists in the data volume):
       #   { "x-opencode-session": "{{CHAT_ID}}" }

@@ -163,3 +163,27 @@ llm:
           priority: 0
         - model: glm-5.2
           priority: 1
+
+# MCP servers exposed by the gateway. Defined here (config.yml), not in the UI,
+# so this file stays the source of truth. All targets are multiplexed into one
+# virtual MCP server, served at /mcp and /sse on the gateway port below -- which
+# is what open-webui's single MCP connection points at. Tool names are prefixed
+# with the target name when there is more than one target.
+gateways:
+  default:
+    port: 4000
+
+mcp:
+  gateways: default
+  # Add MCP servers here. Each target is multiplexed into the same /mcp endpoint,
+  # so a new server needs no change in open-webui. Example (a Streamable HTTP
+  # target, reached by its compose service name):
+  # - name: everything
+  #   mcp:
+  #     host: mcp-everything
+  #     port: 3005
+  #     path: /mcp
+  #
+  # NOTE: with no targets, the /mcp endpoint answers 503 ("no backends
+  # configured"), so open-webui's connection exposes no tools until you add one.
+  targets: []
