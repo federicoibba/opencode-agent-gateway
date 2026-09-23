@@ -31,8 +31,8 @@ Two containers:
 
 ## Architecture
 
-Two layers: the **gateway** is shared infrastructure, and the **workspaces** are
-per-domain agents built on top of it.
+Two layers: the **gateway** is shared infrastructure, and the **agents** are
+per-workspace bundles built on top of it.
 
 **Runtime** — the request path:
 
@@ -59,8 +59,8 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  subgraph REPO["workspaces/&lt;domain&gt;/"]
-    W["workspace.md"]
+  subgraph REPO["workspaces/"]
+    AG["agents/*/*.yml"]
     SK["skills/*/SKILL.md"]
     PR["prompts/*.md"]
   end
@@ -73,7 +73,7 @@ flowchart LR
     CONN["Connection<br/>x-opencode-session"]
   end
 
-  W --> SYNC
+  AG --> SYNC
   SK --> SYNC
   PR --> SYNC
   SYNC --> MODEL
@@ -85,10 +85,11 @@ flowchart LR
   catalog, one `x-opencode-session` policy — plus the MCP servers **every model**
   can call (GitHub, …), multiplexed into a single endpoint on `:4000`. Both are
   declared in `config.yml`.
-- **Workspaces (per domain).** Plain Markdown under `workspaces/<domain>/` —
-  instructions, skills and prompts — reconciled into an open-webui **Model** and
-  a **Folder** bound to it, so each domain is its own agent in the model picker
-  and its own place in the sidebar.
+- **Agents (per workspace).** YAML under `workspaces/agents/` — an inline system
+  prompt, skills and MCPs — reconciled into an open-webui **Model** and a
+  **Folder** bound to it, so each agent is its own entry in the model picker and
+  its own place in the sidebar. Agents can share skills (`workspaces/skills/`)
+  and extend one another with `extends:`.
 - **`workspace-sync`** is the bridge: on every `up` it reads the repo, sets the
   connection's session header, and upserts the models, skills, prompts and
   folders to match.
@@ -102,7 +103,7 @@ Any other OpenAI client (a script, an SDK, your own agent) can use
 
 - Docker with Docker Compose v2 (`docker compose ...`)
 - An **OpenCode Go** subscription and API key: <https://opencode.ai/auth>
-- [mise](https://mise.jdx.dev/) — for the `mise run <task>` shortcuts and the pinned Python used by `models`/`smoke` (run `mise install` once). Optional: the raw `docker compose` commands and a system `python3` work without it. `mise run prereqs` checks docker/compose/curl/python.
+- [mise](https://mise.jdx.dev/) — for the `mise run <task>` shortcuts and the pinned Python used by `models`/`smoke` and the local `workspaces` dry-run (run `mise install`, then `mise run setup-deps` once for PyYAML). Optional: the raw `docker compose` commands and a system `python3` work without it. `mise run prereqs` checks docker/compose/curl/python.
 
 ---
 
@@ -133,9 +134,9 @@ curl -s http://localhost:3000/v1/models | jq -r '.data[].id'
 ```
 
 Then open the chat UI at <http://localhost:3080> (create the first admin account on
-first run). To have the session header and the domain workspaces set up
-automatically on `up`, also set the workspace credentials in `.env` (see
-[Workspaces](#workspaces-domains-in-the-chat-ui)).
+first run). To have the session header and the agents set up automatically on
+`up`, also set the workspace credentials in `.env` (see
+[Workspaces](#workspaces-agents-in-the-chat-ui)).
 
 ### Smoke test from the command line
 
@@ -194,36 +195,44 @@ the first user message, so it works either way — the header just makes it exac
 
 ---
 
-## Workspaces (domains in the chat UI)
+## Workspaces (agents in the chat UI)
 
 The gateway is the shared infrastructure — providers, models and MCP servers
-declared in `config.yml`. A **workspace** is the other half: one domain
-(frontend, backend, …) bundled as plain Markdown and reconciled into open-webui's
-**Workspace**, so each domain shows up in the model picker as its own agent.
+declared in `config.yml`. An **agent** is the other half: one workspace
+(frontend, frontend-vue, backend, …) declared as YAML and reconciled into
+open-webui's **Workspace**, so each agent shows up in the model picker as its
+own agent.
 
 ```
-workspaces/frontend/
-├── workspace.md               # metadata + system instructions (the Model prompt)
-├── skills/accessibility-audit/SKILL.md
-├── skills/design-tokens/SKILL.md
-└── prompts/review-ui.md        # becomes /review-ui
+workspaces/
+├── agents/frontend/frontend.yml           # metadata + inline system prompt
+├── agents/frontend/skills/…/SKILL.md      # local skills (attached implicitly)
+├── agents/frontend-vue/frontend-vue.yml   # extends: frontend
+├── skills/<id>/SKILL.md                   # shared skill library
+├── mcps/agentgateway.json                 # shared MCP library
+└── prompts/review-ui.md                   # global slash command (/review-ui)
 ```
 
-`tools/workspace_sync.py` reads those files and upserts, per domain:
+`scripts/workspace_sync/` reads those files and upserts, per agent:
 
-- a **Model** preset (id = domain name) on top of `base_model`, with the system
-  instructions, the bound **Skills** and the MCP tool ids from `tools`;
-- one **Skill** per `skills/*/SKILL.md`, lazy-loaded by the model on demand;
+- a **Model** preset (id = agent id) on top of `base_model`, with the inline
+  system prompt, the bound **Skills** and the MCP tool ids from `mcps`;
+- one **Skill** per distinct skill used (a local `skills/*/SKILL.md` or a shared
+  `skills/<id>/SKILL.md`), lazy-loaded by the model on demand;
 - one **Prompt** per `prompts/*.md`;
 - a sidebar **Folder** bound to the model, so a chat opened in "Frontend" starts
   on the Frontend agent.
 
+An agent can extend another with `extends:` — lists spread, `params` deep-merge,
+`prompt_append` is concatenated — so a specific "frontend-vue" agent reuses the
+generic "frontend" one. `publish: false` marks an extend-only base.
+
 It runs automatically on `docker compose up` (the one-shot `workspace-sync`
-service), so a fresh stack comes up with the domains already bundled in the UI.
-Re-run it after editing Markdown:
+service), so a fresh stack comes up with the agents already bundled in the UI.
+Re-run it after editing YAML:
 
 ```bash
-mise run workspaces        # dry-run: print the plan
+mise run workspaces        # dry-run: resolved plan (once: mise run setup-deps)
 mise run sync-workspaces   # apply to open-webui
 ```
 
@@ -387,8 +396,8 @@ agentgateway-data volume (request logs). Pulled images are left in place; add
 `--rmi all` if you want those gone too.
 
 The `mise.toml` tasks wrap the common commands: `mise run up`, `down`, `restart`,
-`logs`, `models`, `smoke`, `pull`, `config`, `sync-workspaces`, `workspaces`, and
-`destroy` (`mise tasks` lists them all).
+`logs`, `models`, `smoke`, `pull`, `config`, `setup-deps`, `sync-workspaces`,
+`workspaces`, and `destroy` (`mise tasks` lists them all).
 
 - `config.yml` is mounted **read-write** and is edited on the host.
   `config.storage.mode: hybrid` sends UI-created resources to the database, so the
@@ -460,11 +469,17 @@ The `mise.toml` tasks wrap the common commands: `mise run up`, `down`, `restart`
 ├── mise.toml            # task runner (up, logs, models, smoke, sync, ...)
 ├── config.yml           # agentgateway config (provider, models, logging, database, session policy, MCP)
 ├── docker-compose.yml   # agentgateway + open-webui + workspace-sync
-├── workspaces/          # domain bundles (Markdown) reconciled into open-webui
+├── workspaces/          # agent bundles reconciled into open-webui
 │   ├── README.md
-│   └── frontend/        # example domain: instructions + skills + prompts
-├── tools/
-│   └── workspace_sync.py  # syncs workspaces/ into open-webui (stdlib only)
+│   ├── agents/          # one YAML per agent (+ optional local skills/mcps)
+│   ├── skills/          # shared skill library
+│   ├── mcps/            # shared MCP library (JSON)
+│   └── prompts/         # global slash-command prompts
+├── scripts/
+│   ├── Dockerfile       # workspace-sync image (PyYAML baked in)
+│   ├── requirements.txt
+│   └── workspace_sync/  # sync package (python -m workspace_sync)
+├── tests/               # unittest suite for the sync
 ├── docs/                # screenshots used by this README
 │   ├── connection-headers.png
 │   └── connection-settings.png

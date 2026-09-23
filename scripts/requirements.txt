@@ -1,0 +1,4 @@
+# Runtime deps for the workspace_sync package (scripts/workspace_sync).
+# Installed in the workspace-sync image (scripts/Dockerfile) and, for local
+# dry-runs, with: python3 -m pip install --user -r scripts/requirements.txt
+pyyaml==6.0.3

@@ -1,0 +1,7 @@
+{
+  "name": "agentgateway",
+  "description": "Tools exposed by the agentgateway MCP endpoint",
+  "tool_id": "server:mcp:agentgateway",
+  "url": "http://agentgateway:4000/mcp",
+  "auth_type": "none"
+}

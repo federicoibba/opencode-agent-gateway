@@ -81,24 +81,27 @@ services:
       start_period: 30s
 
   # One-shot: reconciles this repo into open-webui -- the gateway connection's
-  # per-chat session header, plus each workspaces/<domain>/ as a Model, Skills,
+  # per-chat session header, plus each workspaces/agents/<id> as a Model, Skills,
   # Prompts and a bound Folder. Runs on every `docker compose up`, is idempotent,
   # and exits 0 (with a warning) when no credentials are configured.
   # Re-run on demand with `mise run sync-workspaces` (docker compose run --rm workspace-sync).
   workspace-sync:
-    image: python:3.14-slim
+    build:
+      context: ./scripts
+    image: agent-gateway/workspace-sync:local
     depends_on:
       open-webui:
         condition: service_healthy
     volumes:
       - ./workspaces:/workspaces:ro
-      - ./tools:/tools:ro
+      - ./scripts:/scripts:ro
     environment:
       - OPENWEBUI_URL=http://open-webui:8080
       - OPENWEBUI_API_KEY=${OPENWEBUI_API_KEY:-}
       - WEBUI_ADMIN_EMAIL=${WEBUI_ADMIN_EMAIL:-}
       - WEBUI_ADMIN_PASSWORD=${WEBUI_ADMIN_PASSWORD:-}
-    command: ["python", "/tools/workspace_sync.py", "--workspaces", "/workspaces", "--url", "http://open-webui:8080"]
+    working_dir: /scripts
+    command: ["python", "-m", "workspace_sync", "--workspaces", "/workspaces", "--url", "http://open-webui:8080"]
     restart: "no"
 
 volumes:

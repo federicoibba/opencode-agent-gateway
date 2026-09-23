@@ -7,7 +7,8 @@
 # `mise sync`) collides with mise's own subcommands/aliases (upgrade, config,
 # sync), so task names here avoid the reserved ones.
 #
-# Toolchain: mise pins/installs Python, used by the `models`/`smoke` tasks.
+# Toolchain: mise pins/installs Python, used by the `models`/`smoke` tasks and
+# the local `workspaces` dry-run (run `mise run setup-deps` once for PyYAML).
 # Docker (engine + Compose) and curl are system-level and cannot be managed by
 # mise: Docker Desktop / the Docker engine provides `docker compose`, and curl
 # is not in mise's registry. `mise run prereqs` checks them.
@@ -24,6 +25,10 @@ docker compose version
 curl --version | head -n1
 python3 --version
 """
+
+[tasks.setup-deps]
+description = "Install the Python deps for the workspace sync (PyYAML)"
+run = "python3 -m pip install --user -r scripts/requirements.txt"
 
 [tasks.up]
 description = "Start (or apply changes to) the stack"
@@ -84,10 +89,10 @@ description = "Validate config.yml and the compose file"
 run = "docker compose config --quiet && echo 'compose OK'"
 
 [tasks.workspaces]
-description = "Show the domain workspace plan without changing anything"
-run = "python3 tools/workspace_sync.py --dry-run"
+description = "Show the agent plan without changing anything"
+run = "PYTHONPATH=scripts python3 -m workspace_sync --dry-run"
 
 [tasks.sync-workspaces]
-description = "Provision open-webui from this repo (session header + workspaces)"
-run = "docker compose run --rm workspace-sync"
+description = "Provision open-webui from this repo (session header + agents)"
+run = "docker compose run --rm --build workspace-sync"
 
