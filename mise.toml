@@ -34,6 +34,24 @@ run = "docker compose up -d"
 description = "Stop the stack (keeps the open-webui and agentgateway-data volumes)"
 run = "docker compose down"
 
+[tasks.destroy]
+description = "Delete the stack: containers, networks and volumes (open-webui data, request logs)"
+usage = '''
+flag "-y --yes" help="Skip the confirmation prompt"
+'''
+run = """
+if [ "${usage_yes:-}" != "true" ] && [ "${FORCE:-0}" != "1" ]; then
+  printf 'This deletes ALL containers, networks and volumes:\\n'
+  printf '  - open-webui accounts, chats and settings (open-webui)\\n'
+  printf '  - agentgateway request logs (agentgateway-data)\\n'
+  printf 'Type "yes" to continue: '
+  read -r answer || answer=""
+  [ "$answer" = "yes" ] || { echo "aborted."; exit 1; }
+fi
+docker compose down -v --remove-orphans
+echo "destroyed: containers, networks and volumes removed"
+"""
+
 [tasks.restart]
 description = "Recreate containers (needed after changing .env)"
 depends = ["prereqs"]

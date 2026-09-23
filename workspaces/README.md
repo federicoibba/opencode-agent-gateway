@@ -37,8 +37,16 @@ else is optional.
 | `workspace.md` `tools` | the Model's bound tools | MCP references, e.g. `server:mcp:agentgateway` |
 | `workspace.md` `params` | the Model's parameters | inline JSON, e.g. `{"temperature": 0.3}` |
 | `workspace.md` `tags` | Model tags | for organising the picker |
+| `workspace.md` `folder` | a sidebar **Folder** bound to the Model | a chat started in it uses the domain agent; default = workspace name, `false` disables |
 | `skills/<id>/SKILL.md` | a **Skill**, bound to the Model | lazy-loaded on demand via `view_skill` |
 | `prompts/<name>.md` | a **Prompt** slash command | invoked as `/name`; override the slug with `command:` |
+
+Each domain also gets a **folder** in the sidebar (`folder.data.model_ids`), so
+opening a chat inside "Frontend" starts it on the Frontend model — the domain
+agent without picking it from the model list.
+
+Folders are per-user, so they are created in the sync account's sidebar (the
+admin). `--prune` never deletes folders: they hold a user's own chats.
 
 The Model is created with the domain's id (the directory name), so a domain
 shows up in the model picker as its own agent — no manual setup in the UI.
@@ -55,6 +63,7 @@ base_model: smart
 tools: ["server:mcp:agentgateway"]
 tags: ["frontend", "ui"]
 params: {"temperature": 0.3}
+folder: Frontend
 ---
 
 # Frontend workspace

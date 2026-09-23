@@ -139,7 +139,9 @@ workspaces/frontend/
 - a **Model** preset (id = domain name) on top of `base_model`, with the system
   instructions, the bound **Skills** and the MCP tool ids from `tools`;
 - one **Skill** per `skills/*/SKILL.md`, lazy-loaded by the model on demand;
-- one **Prompt** per `prompts/*.md`.
+- one **Prompt** per `prompts/*.md`;
+- a sidebar **Folder** bound to the model, so a chat opened in "Frontend" starts
+  on the Frontend agent.
 
 It runs automatically on `docker compose up` (the one-shot `workspace-sync`
 service), so a fresh stack comes up with the domains already bundled in the UI.
@@ -294,11 +296,24 @@ docker compose logs -f agentgateway   # gateway logs (every request is logged)
 docker compose logs -f open-webui     # UI logs
 docker compose pull && docker compose up -d   # update images
 docker compose down           # stop (keeps the open-webui and agentgateway-data volumes)
+docker compose down -v        # stop AND delete containers, networks and volumes (wipes all data)
 ```
 
+`mise run destroy` wraps the destructive one with a confirmation prompt; `-y`
+(or `FORCE=1`) skips it for scripting and tests:
+
+```bash
+mise run destroy        # asks for confirmation
+mise run destroy -y     # no prompt
+```
+
+It deletes the open-webui volume (accounts, chats, settings) and the
+agentgateway-data volume (request logs). Pulled images are left in place; add
+`--rmi all` if you want those gone too.
+
 The `mise.toml` tasks wrap the common commands: `mise run up`, `down`, `restart`,
-`logs`, `models`, `smoke`, `pull`, `config`, `sync-workspaces`, and `workspaces`
-(`mise tasks` lists them all).
+`logs`, `models`, `smoke`, `pull`, `config`, `sync-workspaces`, `workspaces`, and
+`destroy` (`mise tasks` lists them all).
 
 - `config.yml` is mounted **read-write** and is edited on the host.
   `config.storage.mode: hybrid` sends UI-created resources to the database, so the
@@ -330,6 +345,7 @@ The `mise.toml` tasks wrap the common commands: `mise run up`, `down`, `restart`
 | Admin UI save fails with `Read-only file system (os error 30)` | `config.yml` is mounted `:ro` in `docker-compose.yml`, so the UI cannot write back. Drop the `:ro` suffix (see [Editing config](#editing-config)). |
 | UI Logs page: `request log database is not configured` | No database is set. Add `config.database.url` (see [Editing config](#editing-config)) and restart. `config.logging.level`/`format` only affect the stdout stream, not the UI. |
 | UI Logs page: `disk I/O error (code: 522)` | The SQLite DB is on a Docker Desktop **bind mount**. Use a named volume (`agentgateway-data:/data`) instead — SQLite's locking/mmap is unreliable on macOS file sharing. |
+| Gateway exits with `failed to connect sqlite database` / `unable to open database file` | The `agentgateway-data` volume is root-owned but the gateway runs as uid `65532`, so it cannot create the DB. The `agentgateway-data-init` service chowns the volume on every `up` (this also repairs it after `mise run destroy`). If you removed that service, run `docker run --rm -v agent-gateway_agentgateway-data:/data alpine chown -R 65532:65532 /data` and start again. |
 | Go returns `429` | A model hit its Go usage cap. Enable **Use balance** in the Zen console, or route around it (see `smart`). |
 
 ---

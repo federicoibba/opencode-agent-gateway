@@ -194,14 +194,28 @@ def load_domain(domain_dir):
     meta, body = parse_frontmatter(read(os.path.join(domain_dir, "workspace.md")))
     slug = slugify(meta.get("id") or slug)
     tags = [str(t) for t in (meta.get("tags") or [])]
+    name = meta.get("name") or slug
+
+    # A sidebar folder bound to this workspace's model, so a chat started in it
+    # uses the domain's agent. `folder: false` disables it; any other value is
+    # the folder name (defaults to the workspace name).
+    raw_folder = meta.get("folder", True)
+    if raw_folder is False:
+        folder_name = None
+    elif raw_folder in (True, None, "", []):
+        folder_name = name
+    else:
+        folder_name = str(raw_folder)
+
     return {
         "slug": slug,
-        "name": meta.get("name") or slug,
+        "name": name,
         "description": meta.get("description") or "",
         "base_model": meta.get("base_model"),
         "tools": [str(t) for t in (meta.get("tools") or [])],
         "params": meta.get("params") or {},
         "tags": tags,
+        "folder": folder_name,
         "instructions": body.strip(),
         "skills": load_skills(domain_dir, slug),
         "prompts": load_prompts(domain_dir, slug),
@@ -328,6 +342,30 @@ def sync_prompts(base, token, domains, existing, prune, summary):
                 report(summary, status, f"prompt /{command} (pruned)", body)
 
 
+def sync_folders(base, token, domains, existing, summary):
+    """Create one sidebar folder per workspace, bound to the workspace model.
+
+    Folders are per-user: the sync runs as the admin, so these land in the
+    admin's sidebar. ``--prune`` never touches folders (deleting a user's folder
+    is destructive and there is no reliable ownership marker).
+    """
+    for domain in domains:
+        name = domain["folder"]
+        if not name:
+            continue
+        payload = {"name": name, "data": {"model_ids": [domain["slug"]]}}
+        current = existing.get(name)
+        if current:
+            status, body = http(
+                "POST", base, f"/api/v1/folders/{current['id']}/update", token, payload
+            )
+            action = "updated"
+        else:
+            status, body = http("POST", base, "/api/v1/folders/", token, payload)
+            action = "created"
+        report(summary, status, f"folder {name} ({action})", body)
+
+
 def sync_models(base, token, domains, existing, prune, summary):
     models = []
     for domain in domains:
@@ -370,6 +408,7 @@ def print_plan(domains):
         print(f"  base_model  : {domain['base_model'] or '(missing!)'}")
         print(f"  tools       : {', '.join(domain['tools']) or '(none)'}")
         print(f"  params      : {json.dumps(domain['params'])}")
+        print(f"  folder      : {domain['folder'] or '(disabled)'}")
         print(f"  instructions: {len(domain['instructions'])} chars")
         for skill in domain["skills"]:
             print(f"  skill       : {skill['id']} — {skill['description']}")
@@ -423,6 +462,7 @@ def main():
 
     _, skills = http("GET", args.url, "/api/v1/skills/", token)
     _, prompts = http("GET", args.url, "/api/v1/prompts/", token)
+    _, folders = http("GET", args.url, "/api/v1/folders/", token)
     status, models = http("GET", args.url, "/api/v1/models/export", token)
     if status != 200:
         models = []
@@ -431,11 +471,13 @@ def main():
 
     existing_skills = index_by(skills, "id")
     existing_prompts = index_by(prompts, "command")
+    existing_folders = index_by(folders, "name")
     existing_models = index_by(models, "id")
 
     summary = {"ok": [], "failed": [], "warnings": []}
     sync_skills(args.url, token, domains, existing_skills, args.prune, summary)
     sync_prompts(args.url, token, domains, existing_prompts, args.prune, summary)
+    sync_folders(args.url, token, domains, existing_folders, summary)
     sync_models(args.url, token, domains, existing_models, args.prune, summary)
 
     for warning in summary["warnings"]:

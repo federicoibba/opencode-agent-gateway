@@ -1,4 +1,17 @@
 services:
+  # agentgateway runs as uid 65532 (distroless, non-root) but a freshly created
+  # named volume is root-owned, so it cannot create its SQLite database. This
+  # one-shot chowns the volume to the gateway's uid before it starts. It is a
+  # no-op when ownership is already correct, and it also repairs the volume after
+  # `mise run destroy` (which deletes it and lets Docker recreate it empty).
+  agentgateway-data-init:
+    image: alpine:3.20
+    user: "0:0"
+    volumes:
+      - agentgateway-data:/data
+    command: ["sh", "-c", "chown -R 65532:65532 /data"]
+    restart: "no"
+
   agentgateway:
     image: cr.agentgateway.dev/agentgateway:latest
     ports:
@@ -19,6 +32,9 @@ services:
     command: ["-f", "/config.yml"]
     environment:
       - OPENCODE_API_KEY=${OPENCODE_API_KEY}
+    depends_on:
+      agentgateway-data-init:
+        condition: service_completed_successfully
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
