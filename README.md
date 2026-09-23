@@ -34,25 +34,51 @@ Two containers:
 Two layers: the **gateway** is shared infrastructure, and the **workspaces** are
 per-domain agents built on top of it.
 
-```
-                 OpenAI-compatible HTTP
-  open-webui  ───────────────────────────►  agentgateway  ──────────►  opencode.ai/zen/go/v1
-  :3080                                     :3000 (LLM)                (OpenCode Go)
-  (browser)                                 :4000 (MCP)
-                                            :15000 (admin)
-                                                 │
-                                                 ├─ injects x-opencode-session
-                                                 ├─ injects User-Agent
-                                                 └─ holds OPENCODE_API_KEY
+**Runtime** — the request path:
 
-  open-webui  ──── MCP tools ────►  agentgateway :4000  ────►  MCP servers (github, …)
+```mermaid
+flowchart LR
+  OW["open-webui :3080"]
+
+  subgraph AG["agentgateway"]
+    LLM[":3000 LLM"]
+    MCP[":4000 MCP"]
+    ADMIN[":15000 admin"]
+  end
+
+  GO["OpenCode Go<br/>opencode.ai/zen/go/v1"]
+  SRV["MCP servers<br/>github, …"]
+
+  OW -->|"OpenAI-compatible HTTP"| LLM
+  LLM -->|"x-opencode-session, User-Agent"| GO
+  OW -->|"MCP tools"| MCP
+  MCP --> SRV
 ```
 
-```
-  workspaces/<domain>/               workspace-sync                 open-webui Workspace
-    workspace.md      ─┐             (one-shot on `up`)        ┌─► Model  (instructions,
-    skills/*/SKILL.md ─┼────────────── reconciles ─────────────┤           skills, tools)
-    prompts/*.md      ─┘             + session header          └─► Folder (bound to the Model)
+**Provisioning** — how this repo reaches the UI:
+
+```mermaid
+flowchart LR
+  subgraph REPO["workspaces/&lt;domain&gt;/"]
+    W["workspace.md"]
+    SK["skills/*/SKILL.md"]
+    PR["prompts/*.md"]
+  end
+
+  SYNC["workspace-sync<br/>(one-shot on up)"]
+
+  subgraph OW["open-webui"]
+    MODEL["Model<br/>instructions · skills · tools"]
+    FOLDER["Folder → Model"]
+    CONN["Connection<br/>x-opencode-session"]
+  end
+
+  W --> SYNC
+  SK --> SYNC
+  PR --> SYNC
+  SYNC --> MODEL
+  SYNC --> FOLDER
+  SYNC --> CONN
 ```
 
 - **Gateway (shared).** The OpenCode Go connection — one API key, one model
