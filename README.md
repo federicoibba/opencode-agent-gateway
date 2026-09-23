@@ -51,6 +51,7 @@ Any other OpenAI client (a script, an SDK, your own agent) can use
 
 - Docker with Docker Compose v2 (`docker compose ...`)
 - An **OpenCode Go** subscription and API key: <https://opencode.ai/auth>
+- [mise](https://mise.jdx.dev/) — for the `mise run <task>` shortcuts and the pinned Python used by `models`/`smoke` (run `mise install` once). Optional: the raw `docker compose` commands and a system `python3` work without it. `mise run prereqs` checks docker/compose/curl/python.
 
 ---
 
@@ -254,8 +255,8 @@ docker compose pull && docker compose up -d   # update images
 docker compose down           # stop (keeps the open-webui and agentgateway-data volumes)
 ```
 
-The `Makefile` wraps the common commands: `make up`, `down`, `restart`, `logs`,
-`models`, `smoke`, `pull`, and `config` (`make help` lists them all).
+The `mise.toml` tasks wrap the common commands: `mise run up`, `down`, `restart`,
+`logs`, `models`, `smoke`, `pull`, and `config` (`mise tasks` lists them all).
 
 - `config.yml` is mounted **read-write** and is edited on the host.
   `config.storage.mode: hybrid` sends UI-created resources to the database, so the
@@ -323,7 +324,7 @@ The `Makefile` wraps the common commands: `make up`, `down`, `restart`, `logs`,
 .
 ├── .env.example         # copy to .env and fill in
 ├── .gitignore
-├── Makefile             # convenience targets (up, logs, models, smoke, ...)
+├── mise.toml            # task runner (up, logs, models, smoke, ...)
 ├── config.yml           # agentgateway config (provider, models, logging, database, session policy)
 ├── docker-compose.yml   # agentgateway + open-webui
 ├── docs/                # screenshots used by this README

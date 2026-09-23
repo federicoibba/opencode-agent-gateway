@@ -23,7 +23,7 @@ config:
     url: "sqlite:///data/agentgateway.db?mode=rwc"
 
   # Logging. Startup-only: takes effect on restart, not hot-reload. Inspect with
-  # `make logs`; change the level live via http://localhost:15000/logging.
+  # `mise run logs`; change the level live via http://localhost:15000/logging.
   logging:
     level: debug
     format: json

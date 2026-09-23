@@ -1,0 +1,65 @@
+# mise tasks for the OpenCode Agent Gateway stack (replaces the Makefile).
+#
+#   mise tasks          # list tasks
+#   mise run <task>     # run one
+#
+# Always use `mise run <task>`; the bare shorthand (`mise up`, `mise config`)
+# collides with mise's own subcommands/aliases (upgrade, config).
+#
+# Toolchain: mise pins/installs Python, used by the `models`/`smoke` tasks.
+# Docker (engine + Compose) and curl are system-level and cannot be managed by
+# mise: Docker Desktop / the Docker engine provides `docker compose`, and curl
+# is not in mise's registry. `mise run prereqs` checks them.
+
+[tools]
+python = "3.14"
+
+[tasks.prereqs]
+description = "Check required tools (docker, compose, curl, python)"
+run = """
+docker --version
+docker info >/dev/null 2>&1 && echo "docker daemon: reachable"
+docker compose version
+curl --version | head -n1
+python3 --version
+"""
+
+[tasks.up]
+description = "Start (or apply changes to) the stack"
+depends = ["prereqs"]
+run = "docker compose up -d"
+
+[tasks.down]
+description = "Stop the stack (keeps the open-webui and agentgateway-data volumes)"
+run = "docker compose down"
+
+[tasks.restart]
+description = "Recreate containers (needed after changing .env)"
+depends = ["prereqs"]
+run = "docker compose up -d --force-recreate"
+
+[tasks.logs]
+description = "Tail agentgateway logs"
+run = "docker compose logs -f agentgateway"
+
+[tasks.models]
+description = "List the models exposed by the gateway"
+run = "curl -s http://localhost:3000/v1/models | python3 -m json.tool"
+
+[tasks.smoke]
+description = "Send a test chat completion through the gateway"
+run = """
+curl -s http://localhost:3000/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -d '{"model":"glm-5.3-flash","max_tokens":32,"messages":[{"role":"user","content":"Say hi in three words."}]}' \
+  | python3 -m json.tool
+"""
+
+[tasks.pull]
+description = "Pull updated images and recreate"
+depends = ["prereqs"]
+run = "docker compose pull && docker compose up -d"
+
+[tasks.config]
+description = "Validate config.yml and the compose file"
+run = "docker compose config --quiet && echo 'compose OK'"
