@@ -12,17 +12,68 @@ Agents live under `workspaces/` and are synced by the `workspace_sync` package i
 ```
 workspaces/
 ├── agents/
+│   ├── base/                              # shared baseline (publish: false)
+│   │   └── base.yml                       # extends target for every agent
 │   ├── frontend/                          # folder form (canonical)
 │   │   ├── frontend.yml                   # metadata + inline system prompt
 │   │   ├── skills/<id>/SKILL.md           # local skills (attached implicitly)
 │   │   └── mcps/<name>.json               # local MCPs (attached implicitly)
 │   ├── frontend-vue/
-│   │   └── frontend-vue.yml               # extends: frontend
+│   │   └── frontend-vue.yml               # extends: frontend (which extends: base)
 │   └── quick.yml                          # flat form: single-file agent
 ├── skills/<id>/SKILL.md                   # shared skill library (by id)
 ├── mcps/<name>.json                       # shared MCP library (by name)
 └── prompts/<command>.md                   # global slash-command prompts
 ```
+
+## The baseline
+
+`agents/base/base.yml` is the shared baseline every published agent inherits
+with `extends: base`. It is `publish: false`, so it becomes no Model and no
+folder — but its `mcps` and `skills` spread into each agent. It holds the
+`agentgateway` MCP and the `jev-agent` skill today, so agents stop repeating
+them. Capabilities every agent needs belong there; agent-specific skills stay in
+the agent's own `skills/`. The baseline sets no `prompt` and no `base_model`, as
+those are per-agent (see [Sharing and spreading](#sharing-and-spreading-extends)).
+
+## Inheritance
+
+Every published agent extends `base`; an agent may extend another agent in turn,
+and the chain resolves recursively (a cycle is an error). Solid edges are real
+agents in the repo; the dashed edge points at an illustrative `backend` you
+could add.
+
+```mermaid
+flowchart TD
+  BASE["base (publish: false)<br/>MCP: agentgateway · skill: jev-agent"]
+
+  FE["Frontend"]
+  FEV["Frontend (Vue)"]
+  JEV["Jev"]
+  BE["Backend (example)"]
+
+  BASE --> FE
+  BASE --> JEV
+  BASE -.-> BE
+  FE --> FEV
+
+  FE --- FE_S["skills: accessibility-audit, design-tokens"]
+  FEV --- FEV_S["skills: + vue"]
+  BE --- BE_S["skills: + api-design"]
+```
+
+Reading it:
+
+- **`base` is never picked.** `publish: false` means no Model and no folder; only
+  its `mcps`, `skills` and `params` spread to children.
+- **Skills accumulate down the chain.** `Frontend (Vue)` extends `Frontend`,
+  which extends `base`, so it carries `jev-agent` + `accessibility-audit` +
+  `design-tokens` + `vue` (union, order-preserving, deduped).
+- **The dashed edge is the example.** `Backend` is not in the repo; it shows the
+  shape a new agent takes — `extends: base`, its own `base_model`, and a local
+  `skills/api-design/` — and it inherits the gateway MCP and `jev-agent` for
+  free. The full worked example is in
+  [`workspaces/README.md`](../workspaces/README.md#adding-an-agent).
 
 ## What an agent becomes
 
@@ -44,10 +95,12 @@ workspaces/
 
 An agent can inherit another with `extends:` — lists spread, `params` deep-merge,
 `prompt` is replaced, and `prompt_append` is concatenated — so a specific
-"frontend-vue" agent reuses the generic "frontend" one. Skills and MCPs live
-either **locally** (in the agent's folder, attached implicitly) or in the
-**shared** libraries (`workspaces/skills/`, `workspaces/mcps/`) and are pulled in
-by id/name. A local entry shadows a shared one with the same id.
+"frontend-vue" agent reuses the generic "frontend" one. Every agent extends the
+shared **`base`** baseline (`publish: false`, so it is never a Model), which is
+where capabilities common to all agents live. Skills and MCPs live either
+**locally** (in the agent's folder, attached implicitly) or in the **shared**
+libraries (`workspaces/skills/`, `workspaces/mcps/`) and are pulled in by
+id/name. A local entry shadows a shared one with the same id.
 
 The full YAML schema, merge rules and worked examples are in
 [`workspaces/README.md`](../workspaces/README.md).

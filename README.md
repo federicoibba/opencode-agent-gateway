@@ -158,10 +158,11 @@ mise run sync-workspaces   # apply to open-webui
 ├── .env.example         # copy to .env and fill in
 ├── mise.toml            # task runner (up, logs, models, smoke, sync, ...)
 ├── config.yml           # agentgateway config (provider, models, logging, database, session policy, MCP)
+├── gateway/             # files referenced by config.yml (OpenAPI specs for MCP targets)
 ├── docker-compose.yml   # agentgateway + open-webui + workspace-sync
 ├── workspaces/          # agent bundles reconciled into open-webui
 │   ├── README.md        # full agent reference
-│   ├── agents/          # one YAML per agent (+ optional local skills/mcps)
+│   ├── agents/          # one YAML per agent (base/ is the shared baseline) (+ optional local skills/mcps)
 │   ├── skills/          # shared skill library
 │   ├── mcps/            # shared MCP library (JSON)
 │   └── prompts/         # global slash-command prompts

@@ -15,6 +15,8 @@ You edit YAML and Markdown here; `workspace-sync` makes open-webui match it.
 ```
 workspaces/
 ├── agents/                          # one agent per YAML file
+│   ├── base/                        # shared baseline (publish: false)
+│   │   └── base.yml                 # extends target for every agent
 │   ├── frontend/                    # folder form (canonical)
 │   │   ├── frontend.yml             # the agent: metadata + inline system prompt
 │   │   ├── skills/                  # optional: skills local to this agent
@@ -22,7 +24,7 @@ workspaces/
 │   │   │   └── design-tokens/SKILL.md
 │   │   └── mcps/                    # optional: MCPs local to this agent
 │   ├── frontend-vue/
-│   │   ├── frontend-vue.yml         # extends: frontend
+│   │   ├── frontend-vue.yml         # extends: frontend (which extends: base)
 │   │   └── skills/vue/SKILL.md
 │   └── quick.yml                    # flat form: single-file agent
 ├── skills/<id>/SKILL.md             # shared skill library (referenced by id)
@@ -37,6 +39,23 @@ An agent is either:
 - **flat form** — `agents/<id>.yml`, for an agent with no local assets.
 
 The agent id defaults to the file/folder name and can be overridden with `id:`.
+
+## The baseline: `extends: base`
+
+Every published agent inherits `agents/base/base.yml` with `extends: base`. The
+baseline is marked `publish: false`, so it is **extend-only**: it creates no
+Model in the picker and no sidebar folder, but its `mcps` and `skills` flow to
+every agent that extends it. Today it carries the `agentgateway` MCP and the
+`jev-agent` skill, so an individual agent no longer repeats them.
+
+Put capabilities that **every** agent should have in the baseline, and
+agent-specific skills in the agent's own `skills/`. The skill's "when to use"
+rules keep a broadly-shared skill from being applied in the wrong place.
+
+The baseline deliberately sets no `prompt` and no `base_model`: `prompt` is
+replaced by a child that defines its own, and `base_model` is each agent's choice.
+If shared behaviour must be stated in prose, use `prompt_append` (which
+concatenates parent → child) rather than `prompt`.
 
 ## What maps to what
 

@@ -1,0 +1,102 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Jev AI decision API",
+    "description": "Typed decisions from Jev AI. POST one state and typed questions, get structured answers with probabilities. The gateway injects the API key; callers must not send Authorization.",
+    "version": "1.0.0"
+  },
+  "servers": [{ "url": "/" }],
+  "paths": {
+    "/v1/systemone": {
+      "post": {
+        "operationId": "jev_systemone",
+        "summary": "Ask Jev one or more typed questions about a state",
+        "description": "Send a state (string, object, or array) and a map of questions. Each question is noul (yes/no probability), choice (pick one option), or score (rate on an ordered scale). Questions are evaluated in parallel against the same state. You choose each key in `questions`; the answer comes back under the same key.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["model", "state", "questions"],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "default": "jev-latest",
+                    "description": "Jev model id. Defaults to jev-latest."
+                  },
+                  "state": {
+                    "description": "The context every question reads: text, a JSON object, or an array of text.",
+                    "oneOf": [
+                      { "type": "string" },
+                      { "type": "object" },
+                      { "type": "array", "items": {} }
+                    ]
+                  },
+                  "questions": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "required": ["type", "instructions"],
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": ["noul", "choice", "score"]
+                        },
+                        "instructions": {
+                          "description": "The decision to make; a string, object, or array.",
+                          "oneOf": [
+                            { "type": "string" },
+                            { "type": "object" },
+                            { "type": "array", "items": {} }
+                          ]
+                        },
+                        "criteria": {
+                          "description": "Type-specific. Choice: a map of option -> description. Score: an ordered array of 2-10 levels, lowest first. Noul: optional {true,false} descriptions.",
+                          "oneOf": [
+                            { "type": "object" },
+                            { "type": "array", "items": {} }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Standard Jev envelope. `data.result.answers` is keyed by the question ids.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": { "type": "integer" },
+                    "message": { "type": "string" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "result": {
+                          "type": "object",
+                          "properties": {
+                            "answers": { "type": "object" },
+                            "usage": { "type": "object" },
+                            "elapsedMs": { "type": "integer" }
+                          }
+                        },
+                        "creditsUsed": { "type": "number" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

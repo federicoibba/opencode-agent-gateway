@@ -1,0 +1,16 @@
+# Base — the shared baseline every agent inherits.
+#
+# `publish: false` makes this extend-only: no Model appears in the picker and no
+# sidebar folder is created. Agents opt in with `extends: base`, which unions in
+# the MCPs and skills below (and, if ever needed, concatenates `prompt_append`
+# parent -> child).
+#
+# It deliberately sets no `base_model` and no `prompt`: those belong to each
+# agent, and a child's `prompt` would replace a parent's anyway. Behaviour that
+# should apply everywhere belongs in a skill, not here.
+name: Base
+description: Shared baseline — the gateway tools and common skills every agent inherits.
+publish: false
+tags: [base]
+mcps: [agentgateway]
+skills: [jev-agent]

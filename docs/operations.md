@@ -34,6 +34,79 @@ The `mise.toml` tasks wrap the common commands: `mise run up`, `down`, `restart`
   the `agentgateway-data` named volume. `docker compose down` keeps it;
   `docker compose down -v` deletes it, along with the logs.
 
+## Testing the Jev tool
+
+The `jev` MCP target is a good end-to-end check of the gateway's MCP path: it
+exercises an OpenAPI target, a route to an external host, and the injected key,
+all without the chat UI. Call it in the **MCP Tool Playground** at
+<http://localhost:15000/ui> → **MCP** → **Tool Playground**: pick the
+`jev_systemone` tool and paste one of the bodies below as its `arguments`.
+
+If the playground shows a full request field instead, wrap the body in
+`{"name":"jev_systemone","arguments": …}`.
+
+**Noul (yes/no probability):**
+
+```json
+{
+  "body": {
+    "state": "Help! My payouts have been failing for 3 days.",
+    "model": "jev-latest",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this convey urgency?"
+      }
+    }
+  }
+}
+```
+
+Expected — a flat TypeSafe envelope, not wrapped in `code`/`data`:
+
+```json
+{
+  "model": "jev-1.13.0",
+  "answers": { "is_urgent": { "type": "noul", "noul": 0.95 } },
+  "usage": { "input_tokens": 283, "output_tokens": 23 }
+}
+```
+
+**Choice (pick one option):**
+
+```json
+{
+  "body": {
+    "state": "Help! My payouts have been failing for 3 days.",
+    "model": "jev-latest",
+    "questions": {
+      "team": {
+        "type": "choice",
+        "instructions": "Which team should handle this?",
+        "criteria": {
+          "billing": "Payments, invoicing, refunds",
+          "technical": "Bugs, outages, integrations",
+          "sales": "Pricing, upgrades, new accounts"
+        }
+      }
+    }
+  }
+}
+```
+
+Do **not** add an `Authorization` header: the gateway injects the key from
+`JEV_API_KEY`. The upstream status is logged, so a failure is easy to place:
+
+```bash
+docker compose logs agentgateway | grep 'v1/systemone' | tail -1
+```
+
+A `"http.status":200` means the gateway reached the API and the key was
+accepted. `401` means the key was rejected — usually the key and the target host
+disagree (a `thejevai.com` key does not authorise `api.typesafe.ai`, and vice
+versa; see [Configuration](configuration.md#environment-variables)). With no
+`JEV_API_KEY` set, the gateway fails to start rather than serving a broken tool.
+
 ## Teardown
 
 `mise run destroy` wraps the destructive `down -v` with a confirmation prompt;

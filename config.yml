@@ -175,15 +175,35 @@ gateways:
 
 mcp:
   gateways: default
-  # Add MCP servers here. Each target is multiplexed into the same /mcp endpoint,
-  # so a new server needs no change in open-webui. Example (a Streamable HTTP
-  # target, reached by its compose service name):
-  # - name: everything
-  #   mcp:
-  #     host: mcp-everything
-  #     port: 3005
-  #     path: /mcp
+  # Each target is multiplexed into the same /mcp endpoint, so a new server needs
+  # no change in open-webui.
   #
-  # NOTE: with no targets, the /mcp endpoint answers 503 ("no backends
-  # configured"), so open-webui's connection exposes no tools until you add one.
-  targets: []
+  # Jev AI (`jev`) is exposed as an OpenAPI target: agentgateway turns the
+  # endpoint in `openapi/jev.json` into MCP tools, and `backendAuth` injects the
+  # key -- the browser, open-webui and the model never see `JEV_API_KEY`. Set it
+  # in `.env` (see .env.example); the container must also receive it (see the
+  # `agentgateway` service in docker-compose.yml).
+  #
+  # The schema is a local file, mounted read-only by docker-compose. agentgateway
+  # resolves a relative schema path against /config.yml's directory, i.e. this
+  # repo. If the schema cannot be read, agentgateway fails to start, so the file
+  # must exist.
+  targets:
+  - name: jev
+    openapi:
+      # `api.typesafe.ai` is the origin this deployment's JEV_API_KEY is issued
+      # for. Keys from https://thejevai.com/settings/apikeys authorize
+      # `thejevai.com` instead -- using the wrong host returns 401. The
+      # `https://` scheme matters: without it the gateway speaks plain HTTP to
+      # port 443 and the request fails.
+      host: https://api.typesafe.ai
+      schema:
+        # Resolved relative to /config.yml's directory, and supplied by the
+        # `./gateway:/gateway:ro` mount in docker-compose.yml. The file must
+        # exist or agentgateway fails to start.
+        file: ./gateway/jev-openapi.json
+    policies:
+      # Static key -> Authorization: Bearer <JEV_API_KEY>.
+      backendAuth:
+        key:
+          value: "$JEV_API_KEY"

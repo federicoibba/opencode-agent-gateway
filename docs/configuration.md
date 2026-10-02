@@ -11,13 +11,13 @@ read-write into the `agentgateway` container.
 
 ```yaml
 providers:
-- name: go
-  provider:
-    custom:
-      formats: [{ type: completions }]
-  params:
-    apiKey: "$OPENCODE_API_KEY"
-    baseUrl: "https://opencode.ai/zen/go/v1"
+  - name: go
+    provider:
+      custom:
+        formats: [{ type: completions }]
+    params:
+      apiKey: "$OPENCODE_API_KEY"
+      baseUrl: "https://opencode.ai/zen/go/v1"
 ```
 
 OpenCode Go normalizes its whole catalog to the OpenAI **Chat Completions** API,
@@ -45,20 +45,20 @@ model names.
 
 ## `config.yml` reference
 
-| Field | Meaning |
-|---|---|
-| `config.adminAddr` | Admin UI bind address. Set to `0.0.0.0:15000` so the Docker port mapping can reach it (startup-only; restart after changing). |
-| `config.storage.mode` | How UI-managed config is persisted. `hybrid` (set here) keeps `config.yml` as the documented baseline and stores UI-created resources in the database, so the UI never rewrites the file. Alternatives: `file` (UI writes to the file — strips comments), `readOnly` (UI cannot write). Startup-only. |
-| `config.logging.level` | Log verbosity: `error`/`warn`/`info`/`debug`/`trace`, or per-module (`info,proxy::httpproxy=trace`). Set to `debug` here. Startup-only; change it live at `http://localhost:15000/logging`. |
-| `config.logging.format` | Log output format: `text` (default) or `json`. Set to `json` here. |
-| `config.database.url` | Database behind the UI's **Logs / Analytics / Costs** pages; setting it also persists access logs to a `request_logs` table. SQLite or PostgreSQL. Set to SQLite at `/data/agentgateway.db`. Startup-only. |
-| `llm.port` | Port the OpenAI-compatible API is served on (container `3000`). |
-| `llm.providers[]` | Reusable provider definitions; referenced by `provider.reference`. |
-| `llm.models[].name` | The model name clients request (and that appears in `/v1/models`). |
-| `llm.models[].visibility` | `public` (default, listed + requestable) or `internal` (hidden, not directly requestable). |
-| `llm.models[].provider` | `{ reference: go }` points at the provider above. |
-| `llm.virtualModels[]` | Aliases that route across concrete models (`weighted`, `failover`, `conditional`). |
-| `llm.policies.transformations.request.set` | Header rewrites applied before the request goes upstream (CEL expressions). See [the session header](architecture.md#the-per-chat-session-header). |
+| Field                                      | Meaning                                                                                                                                                                                                                                                                                               |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `config.adminAddr`                         | Admin UI bind address. Set to `0.0.0.0:15000` so the Docker port mapping can reach it (startup-only; restart after changing).                                                                                                                                                                         |
+| `config.storage.mode`                      | How UI-managed config is persisted. `hybrid` (set here) keeps `config.yml` as the documented baseline and stores UI-created resources in the database, so the UI never rewrites the file. Alternatives: `file` (UI writes to the file — strips comments), `readOnly` (UI cannot write). Startup-only. |
+| `config.logging.level`                     | Log verbosity: `error`/`warn`/`info`/`debug`/`trace`, or per-module (`info,proxy::httpproxy=trace`). Set to `debug` here. Startup-only; change it live at `http://localhost:15000/logging`.                                                                                                           |
+| `config.logging.format`                    | Log output format: `text` (default) or `json`. Set to `json` here.                                                                                                                                                                                                                                    |
+| `config.database.url`                      | Database behind the UI's **Logs / Analytics / Costs** pages; setting it also persists access logs to a `request_logs` table. SQLite or PostgreSQL. Set to SQLite at `/data/agentgateway.db`. Startup-only.                                                                                            |
+| `llm.port`                                 | Port the OpenAI-compatible API is served on (container `3000`).                                                                                                                                                                                                                                       |
+| `llm.providers[]`                          | Reusable provider definitions; referenced by `provider.reference`.                                                                                                                                                                                                                                    |
+| `llm.models[].name`                        | The model name clients request (and that appears in `/v1/models`).                                                                                                                                                                                                                                    |
+| `llm.models[].visibility`                  | `public` (default, listed + requestable) or `internal` (hidden, not directly requestable).                                                                                                                                                                                                            |
+| `llm.models[].provider`                    | `{ reference: go }` points at the provider above.                                                                                                                                                                                                                                                     |
+| `llm.virtualModels[]`                      | Aliases that route across concrete models (`weighted`, `failover`, `conditional`).                                                                                                                                                                                                                    |
+| `llm.policies.transformations.request.set` | Header rewrites applied before the request goes upstream (CEL expressions). See [the session header](architecture.md#the-per-chat-session-header).                                                                                                                                                    |
 
 ## Editing config
 
@@ -82,14 +82,16 @@ How a change is applied depends on the section:
 
 ## Environment variables
 
-| Variable | Required | Used by | Notes |
-|---|---|---|---|
-| `OPENCODE_API_KEY` | yes | agentgateway | Your OpenCode Go key. |
-| `WEBUI_ADMIN_EMAIL` | no | workspace-sync | Admin email; with the password, bootstraps the first admin and signs the sync in. |
-| `WEBUI_ADMIN_PASSWORD` | no | workspace-sync | Admin password. |
-| `OPENWEBUI_API_KEY` | no | workspace-sync | API key alternative to the admin pair. |
+| Variable               | Required          | Used by        | Notes                                                                                                                                                                                                                                                           |
+| ---------------------- | ----------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OPENCODE_API_KEY`     | yes               | agentgateway   | Your OpenCode Go key.                                                                                                                                                                                                                                           |
+| `JEV_API_KEY`          | for the Jev agent | agentgateway   | Jev AI key, injected upstream by the `jev` MCP target's `backendAuth` policy. Never reaches open-webui or the model. The key must be issued for the target host in `config.yml` (`api.typesafe.ai` or `thejevai.com`); a key from the other host returns `401`. |
+| `WEBUI_ADMIN_EMAIL`    | no                | workspace-sync | Admin email; with the password, bootstraps the first admin and signs the sync in.                                                                                                                                                                               |
+| `WEBUI_ADMIN_PASSWORD` | no                | workspace-sync | Admin password.                                                                                                                                                                                                                                                 |
+| `OPENWEBUI_API_KEY`    | no                | workspace-sync | API key alternative to the admin pair.                                                                                                                                                                                                                          |
 
 Referenced env vars are resolved at config load. If one is missing, agentgateway
 **fails to start** (`error looking key '...' up: environment variable not found`) —
 it does not fall back to a default. See `.env.example` for the workspace-sync
-credential options.
+credential options, and [Testing the Jev tool](operations.md#testing-the-jev-tool)
+for a playground request that checks the key end to end.
