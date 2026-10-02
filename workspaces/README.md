@@ -4,7 +4,7 @@ Agent bundles for the chat UI. The split of responsibility is deliberate:
 
 - **The gateway** (`config.yml`) is the shared layer — providers, models and the
   MCP servers every agent can reach. It is infrastructure.
-- **An agent** is one workspace — frontend, frontend-vue, backend, data, whatever
+- **An agent** is one workspace — frontend, backend-go, data, cloud, whatever
   — declared as a YAML file and reconciled into open-webui's **Workspace** by the
   `workspace_sync` package (`scripts/workspace_sync/`).
 
@@ -17,20 +17,28 @@ workspaces/
 ├── agents/                          # one agent per YAML file
 │   ├── base/                        # shared baseline (publish: false)
 │   │   └── base.yml                 # extends target for every agent
-│   ├── frontend/                    # folder form (canonical)
-│   │   ├── frontend.yml             # the agent: metadata + inline system prompt
-│   │   ├── skills/                  # optional: skills local to this agent
-│   │   │   ├── accessibility-audit/SKILL.md
-│   │   │   └── design-tokens/SKILL.md
-│   │   └── mcps/                    # optional: MCPs local to this agent
-│   ├── frontend-vue/
-│   │   ├── frontend-vue.yml         # extends: frontend (which extends: base)
-│   │   └── skills/vue/SKILL.md
+│   ├── frontend/                    # Vue 3 + Nuxt
+│   │   └── frontend.yml
+│   ├── backend-go/
+│   │   └── backend-go.yml
+│   ├── data/                        # extends: backend-go
+│   │   └── data.yml
+│   ├── cloud/                       # Cloudflare + AWS
+│   │   └── cloud.yml
+│   ├── devops/                      # extends: cloud
+│   │   └── devops.yml
+│   ├── product/  architect/  planner/  designer/
+│   ├── security/  qa/  docs/  agent-ops/
 │   └── quick.yml                    # flat form: single-file agent
 ├── skills/<id>/SKILL.md             # shared skill library (referenced by id)
 ├── mcps/<name>.json                 # shared MCP library (referenced by name)
 └── prompts/<command>.md             # global slash-command prompts
 ```
+
+`reviewer`, `performance` and `refactor` are deliberately **not** agents: their
+skills (`code-review`, `silent-failures`, `performance-web`,
+`performance-backend`, `refactoring`) live on `base` and are invoked through the
+`/review`, `/perf` and `/refactor` prompts.
 
 An agent is either:
 
@@ -44,37 +52,42 @@ The agent id defaults to the file/folder name and can be overridden with `id:`.
 
 Every published agent inherits `agents/base/base.yml` with `extends: base`. The
 baseline is marked `publish: false`, so it is **extend-only**: it creates no
-Model in the picker and no sidebar folder, but its `mcps` and `skills` flow to
-every agent that extends it. Today it carries the `agentgateway` MCP and the
-`jev-agent` skill, so an individual agent no longer repeats them.
+Model in the picker and no sidebar folder, but its `mcps`, `skills` and
+`prompt_append` flow to every agent that extends it. It carries the
+`agentgateway` MCP, the `jev-agent` and `agent-self-eval` skills, and the
+cross-cutting review skills (`code-review`, `silent-failures`,
+`performance-web`, `performance-backend`, `refactoring`).
 
 Put capabilities that **every** agent should have in the baseline, and
-agent-specific skills in the agent's own `skills/`. The skill's "when to use"
-rules keep a broadly-shared skill from being applied in the wrong place.
+agent-specific skills in the agent's own `skills/` or the shared library. The
+skill's "when to use" rules keep a broadly-shared skill from being applied in the
+wrong place.
 
 The baseline deliberately sets no `prompt` and no `base_model`: `prompt` is
 replaced by a child that defines its own, and `base_model` is each agent's choice.
-If shared behaviour must be stated in prose, use `prompt_append` (which
-concatenates parent → child) rather than `prompt`.
+Shared prose is stated with `prompt_append` (concatenated parent → child) — this
+is where the operating/security baseline lives.
 
 ## What maps to what
 
-| Agent YAML | Becomes in open-webui | Notes |
-| --- | --- | --- |
-| `prompt` | the **Model** system prompt | inline in the YAML |
-| `prompt_append` | appended to the inherited prompt | concatenated parent-to-child |
-| `base_model` | the Model's base model | any gateway model: `smart`, `fast`, `glm-5.3-flash`, … |
-| `mcps` | the Model's bound tools | names from `workspaces/mcps/` |
-| `skills` | the Model's bound skills | ids from `workspaces/skills/` |
-| `tags` | Model tags | for organising the picker |
-| `folder` | a sidebar **Folder** bound to the Model | default = agent name, `false` disables |
-| `params` | the Model's parameters | optional; deep-merged across `extends` |
-| `publish` | whether a Model is created | `false` = extend-only base |
-| `skills/<id>/SKILL.md` | a **Skill** | local ones attach implicitly; lazy-loaded via `view_skill` |
-| `prompts/<name>.md` | a **Prompt** slash command | global; invoked as `/name` |
+| Agent YAML             | Becomes in open-webui                   | Notes                                                        |
+| ---------------------- | --------------------------------------- | ------------------------------------------------------------ |
+| `prompt`               | the **Model** system prompt             | inline in the YAML                                           |
+| `prompt_append`        | appended to the inherited prompt        | concatenated parent-to-child                                 |
+| `base_model`           | the Model's base model                  | any gateway model: `smart`, `fast`, `glm-5.3-flash`, …       |
+| `mcps`                 | the Model's bound tools                 | names from `workspaces/mcps/`                                |
+| `skills`               | the Model's bound skills                | ids from `workspaces/skills/`                                |
+| `tags`                 | Model tags                              | for organising the picker                                    |
+| `folder`               | a sidebar **Folder** bound to the Model | default = agent name, `false` disables                       |
+| `folder_icon`          | the Folder's sidebar icon               | an open-webui emoji name (e.g. `cloud`, `lock`, `test_tube`) |
+| `params`               | the Model's parameters                  | optional; deep-merged across `extends`                       |
+| `publish`              | whether a Model is created              | `false` = extend-only base                                   |
+| `skills/<id>/SKILL.md` | a **Skill**                             | local ones attach implicitly; lazy-loaded via `view_skill`   |
+| `prompts/<name>.md`    | a **Prompt** slash command              | global; invoked as `/name`                                   |
 
 Each published agent also gets a **folder** in the sidebar (`folder.data.model_ids`),
 so opening a chat inside "Frontend" starts it on the Frontend model.
+`folder_icon` sets that folder's sidebar icon (an open-webui emoji name).
 
 Folders are per-user, so they are created in the sync account's sidebar (the
 admin). `--prune` never deletes folders: they hold a user's own chats.
@@ -82,19 +95,20 @@ admin). `--prune` never deletes folders: they hold a user's own chats.
 ## An agent
 
 ```yaml
-# workspaces/agents/frontend/frontend.yml
-name: Frontend
-description: Frontend engineering workspace for UI, accessibility and design systems.
+# workspaces/agents/backend-go/backend-go.yml
+name: Backend (Go)
+description: Backend engineering workspace for Go services, HTTP APIs, concurrency and error handling.
+extends: base
 base_model: smart
-tags: [frontend, ui, design-system]
-folder: Frontend
-mcps: [agentgateway]        # from workspaces/mcps/
-skills: []                  # from workspaces/skills/; local skills/ attach implicitly
+tags: [backend, go, api]
+folder: Backend (Go)
+mcps: [agentgateway] # from workspaces/mcps/
+skills: [go, api-design, error-handling, tdd]
 
 prompt: |
-  # Frontend workspace
+  # Backend (Go) workspace
 
-  You are the frontend engineering assistant for this team …
+  You are the backend engineer for this team …
 ```
 
 `prompt` is the agent's system prompt, inline. (This is separate from the
@@ -102,31 +116,33 @@ prompt: |
 
 ## Sharing and spreading: `extends`
 
-An agent can inherit from one or more other agents. This is how a generic
-"frontend" agent gets a specific "frontend-vue" variant without duplication:
+An agent can inherit from one or more other agents. This is how the Data agent
+reuses the Backend (Go) agent without duplication:
 
 ```yaml
-# workspaces/agents/frontend-vue/frontend-vue.yml
-name: Frontend (Vue)
-extends: frontend            # or: extends: [frontend, base-ts]
-folder: Frontend (Vue)
-tags: [vue]
-prompt_append: |
-  You specialise in Vue 3: Composition API, <script setup>, Volar and vue-tsc.
-# the `vue` skill lives in agents/frontend-vue/skills/ and attaches implicitly
+# workspaces/agents/data/data.yml
+name: Data
+description: Database workspace for PostgreSQL schema design, migrations and query performance.
+extends: backend-go # or: extends: [backend-go, base]
+folder: Data
+tags: [database, postgres]
+skills: [postgres, migrations, data-modeling]
+prompt: |
+  # Data workspace
+  You specialise in PostgreSQL …
 ```
 
 Merge rules:
 
-| Field | Rule |
-| --- | --- |
-| `extends` | resolved recursively; a cycle is an error |
-| `skills`, `mcps`, `tags` | unioned (the "spread"), order-preserving, deduped |
-| `params` | deep-merged, child wins |
-| `description`, `base_model` | child overrides the parent |
-| `prompt` | child replaces the parent's prompt |
-| `prompt_append` | concatenated parent → child |
-| `name`, `folder`, `publish` | per-agent, **never** inherited |
+| Field                                      | Rule                                              |
+| ------------------------------------------ | ------------------------------------------------- |
+| `extends`                                  | resolved recursively; a cycle is an error         |
+| `skills`, `mcps`, `tags`                   | unioned (the "spread"), order-preserving, deduped |
+| `params`                                   | deep-merged, child wins                           |
+| `description`, `base_model`                | child overrides the parent                        |
+| `prompt`                                   | child replaces the parent's prompt                |
+| `prompt_append`                            | concatenated parent → child                       |
+| `name`, `folder`, `folder_icon`, `publish` | per-agent, **never** inherited                    |
 
 ## Local vs shared
 
@@ -167,9 +183,9 @@ here.
 ## Adding an agent
 
 ```bash
-mkdir -p workspaces/agents/backend
-cp workspaces/agents/frontend/frontend.yml workspaces/agents/backend/backend.yml
-$EDITOR workspaces/agents/backend/backend.yml   # name, prompt, skills, mcps
+mkdir -p workspaces/agents/payments
+cp workspaces/agents/backend-go/backend-go.yml workspaces/agents/payments/payments.yml
+$EDITOR workspaces/agents/payments/payments.yml   # name, prompt, skills, mcps
 mise run workspaces        # dry-run: show the resolved plan
 mise run sync-workspaces   # apply to open-webui
 ```

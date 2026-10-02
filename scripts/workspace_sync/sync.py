@@ -105,6 +105,13 @@ def sync_folders(base, token, agents, existing, summary):
             continue
         payload = {"name": agent["folder"], "data": {"model_ids": [agent["id"]]}}
         current = existing.get(agent["folder"])
+        # `folder_icon` is an open-webui emoji name (folder.meta.icon), rendered
+        # in the sidebar. Only write `meta` when it differs, so a manual
+        # background image or other meta is not needlessly overwritten.
+        icon = agent.get("folder_icon")
+        current_icon = ((current or {}).get("meta") or {}).get("icon")
+        if icon and current_icon != icon:
+            payload["meta"] = {"icon": icon}
         if current:
             status, body = http(
                 "POST", base, f"/api/v1/folders/{current['id']}/update", token, payload

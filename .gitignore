@@ -1,6 +1,9 @@
 # Local secrets
 .env
 
+# Local proposals / scratch output
+output/
+
 # Python bytecode
 __pycache__/
 *.py[cod]

@@ -24,8 +24,9 @@ Two containers:
 - The full list of Go models in the model picker, plus two aliases (`fast`, `smart`).
 - A stable `x-opencode-session` per conversation, so Go can route requests and
   reuse prompt caches efficiently.
-- Per-workspace **agents** (frontend, frontend-vue, backend, …) in the model
-  picker, defined as YAML in this repo and synced into open-webui on `up`.
+- Per-workspace **agents** (frontend, backend-go, data, cloud, security, …) in
+  the model picker, defined as YAML in this repo and synced into open-webui on
+  `up`.
 
 ## How it works
 
@@ -139,6 +140,29 @@ the workspace credentials in `.env` (`WEBUI_ADMIN_EMAIL` +
 mise run workspaces        # dry-run: the resolved plan
 mise run sync-workspaces   # apply to open-webui
 ```
+
+## Not built yet
+
+Twelve skills are **placeholders**: they hold only a basic description so the
+agents can bind them, and need real content before they are trustworthy. They
+live at `workspaces/skills/<id>/SKILL.md`; flesh them out in the same house style
+as the adapted skills (`## When to use`, `## How to run`, `## Pitfalls`,
+`## Verification`), then run `mise run workspaces` to check the plan.
+
+| Skill | Bound by | Basic description (to expand) |
+|---|---|---|
+| `cloudflare` | Cloud | Workers/Pages/Functions, bindings (KV, R2, D1, Queues, Durable Objects), Wrangler config, deploys. |
+| `aws` | Cloud | Lambda, API Gateway, ECS/Fargate, RDS, S3, SQS, IAM roles/policies, VPC basics. |
+| `iac` | Cloud | Terraform or Pulumi: module layout, remote state, environments, plan review, safe applies. |
+| `cicd` | DevOps | Build/test/deploy stages, caching, secrets and environments, preview deploys, rollbacks. |
+| `observability` | DevOps | Logging, metrics, tracing, alerts and SLOs. |
+| `incident-response` | DevOps | Triage and mitigation, severity, comms, rollback, blameless postmortems. |
+| `secrets` | Security | Detection, storage and rotation; keeping keys out of code, logs and artifacts. |
+| `threat-modeling` | Security | STRIDE over trust boundaries and data flows, with mitigations. |
+| `testing-go` | QA | Table-driven tests, `httptest`, interfaces/fakes, race detector, coverage. |
+| `testing-vue` | QA | Vitest, Vue Test Utils, component/SSR tests, Playwright journeys. |
+| `data-modeling` | Data | Entities, keys, constraints, normalisation vs denormalisation, indexing. |
+| `prompt-tuning` | Agent Ops | Authoring system prompts, skills and slash prompts; eval-driven iteration. |
 
 ## Documentation
 

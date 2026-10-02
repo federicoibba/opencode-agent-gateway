@@ -140,6 +140,55 @@ class WorkspaceSyncTest(unittest.TestCase):
         self.assertEqual(agents["anon"]["name"], "anon")
         self.assertEqual(agents["anon"]["folder"], "anon")
 
+    def test_folder_icon_is_carried(self):
+        self.agent(
+            "agents/base/base.yml",
+            "name: Base\npublish: false\nbase_model: smart\nprompt: hi\n",
+        )
+        self.agent(
+            "agents/cloud/cloud.yml",
+            "name: Cloud\nextends: base\nbase_model: smart\n"
+            "folder: Cloud\nfolder_icon: cloud\nprompt: hi\n",
+        )
+        self.agent("agents/plain/plain.yml", "name: Plain\nbase_model: smart\nprompt: hi\n")
+        agents = self.load()
+        self.assertEqual(agents["cloud"]["folder_icon"], "cloud")
+        self.assertIsNone(agents["plain"]["folder_icon"])
+
+    def test_sync_folders_sends_icon(self):
+        from workspace_sync import sync as sync_mod
+
+        calls = []
+        original = sync_mod.http
+
+        def fake_http(method, base, path, token, body=None, timeout=60):
+            calls.append((method, path, body))
+            return 200, {}
+
+        sync_mod.http = fake_http
+        try:
+            summary = {"ok": [], "failed": [], "warnings": []}
+            sync_mod.sync_folders(
+                "http://webui",
+                "token",
+                [
+                    {
+                        "id": "cloud",
+                        "folder": "Cloud",
+                        "folder_icon": "cloud",
+                        "publish": True,
+                    }
+                ],
+                {},
+                summary,
+            )
+        finally:
+            sync_mod.http = original
+
+        payload = calls[0][2]
+        self.assertEqual(payload["meta"], {"icon": "cloud"})
+        self.assertEqual(payload["data"]["model_ids"], ["cloud"])
+
     def test_extends_cycle_is_rejected(self):
         self.agent("agents/a/a.yml", "name: A\nextends: b\nprompt: hi\n")
         self.agent("agents/b/b.yml", "name: B\nextends: a\nprompt: hi\n")

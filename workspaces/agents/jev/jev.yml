@@ -13,6 +13,7 @@ extends: base
 base_model: smart
 tags: [jev, decisions]
 folder: Jev
+folder_icon: scales
 
 prompt: |
   # Jev workspace

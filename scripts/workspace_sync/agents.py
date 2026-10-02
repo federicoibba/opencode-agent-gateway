@@ -121,6 +121,7 @@ def build_layer(source, shared_skills, shared_mcps):
         "prompt_append": data.get("prompt_append"),
         "name": data.get("name"),
         "folder": data.get("folder", True),
+        "folder_icon": data.get("folder_icon"),
         "publish": data.get("publish", True) is not False,
         "scalars": {key: data[key] for key in scalar_keys if key in data},
     }
@@ -163,6 +164,7 @@ def merge_layers(parents, own):
         "appends": appends,
         "name": own["name"],
         "folder": own["folder"],
+        "folder_icon": own["folder_icon"],
         "publish": own["publish"],
         "scalars": scalars,
     }
@@ -217,6 +219,7 @@ def finalize(agent):
         "base_model": scalars.get("base_model"),
         "tags": agent["tags"],
         "folder": folder_name,
+        "folder_icon": agent.get("folder_icon"),
         "params": scalars.get("params") or {},
         "publish": agent["publish"],
         "instructions": instructions,

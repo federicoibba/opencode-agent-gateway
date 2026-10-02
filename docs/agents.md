@@ -2,9 +2,10 @@
 
 [Home](../README.md) · [Architecture](architecture.md) · [Configuration](configuration.md) · [Operations](operations.md) · [Troubleshooting](troubleshooting.md)
 
-An **agent** is one workspace — a domain bundle (frontend, frontend-vue, backend,
-…) declared as YAML and reconciled into an open-webui **Workspace**. Each agent
-becomes its own entry in the model picker and its own folder in the sidebar.
+An **agent** is one workspace — a domain bundle (frontend, backend-go, data,
+cloud, …) declared as YAML and reconciled into an open-webui **Workspace**. Each
+agent becomes its own entry in the model picker and its own folder in the
+sidebar.
 
 Agents live under `workspaces/` and are synced by the `workspace_sync` package in
 `scripts/`.
@@ -14,65 +15,80 @@ workspaces/
 ├── agents/
 │   ├── base/                              # shared baseline (publish: false)
 │   │   └── base.yml                       # extends target for every agent
-│   ├── frontend/                          # folder form (canonical)
-│   │   ├── frontend.yml                   # metadata + inline system prompt
-│   │   ├── skills/<id>/SKILL.md           # local skills (attached implicitly)
-│   │   └── mcps/<name>.json               # local MCPs (attached implicitly)
-│   ├── frontend-vue/
-│   │   └── frontend-vue.yml               # extends: frontend (which extends: base)
+│   ├── frontend/                          # Vue 3 + Nuxt
+│   │   └── frontend.yml                   # metadata + inline system prompt
+│   ├── backend-go/
+│   │   └── backend-go.yml
+│   ├── data/                              # extends: backend-go
+│   │   └── data.yml
+│   ├── cloud/                             # Cloudflare + AWS
+│   │   └── cloud.yml
+│   ├── devops/                            # extends: cloud
+│   │   └── devops.yml
+│   ├── product/  architect/  planner/  designer/
+│   ├── security/  qa/  docs/  agent-ops/
 │   └── quick.yml                          # flat form: single-file agent
 ├── skills/<id>/SKILL.md                   # shared skill library (by id)
 ├── mcps/<name>.json                       # shared MCP library (by name)
 └── prompts/<command>.md                   # global slash-command prompts
 ```
 
+Agents may also keep `skills/` and `mcps/` inside their own folder (attached
+implicitly); the factory agents use the shared libraries instead.
+
 ## The baseline
 
 `agents/base/base.yml` is the shared baseline every published agent inherits
 with `extends: base`. It is `publish: false`, so it becomes no Model and no
-folder — but its `mcps` and `skills` spread into each agent. It holds the
-`agentgateway` MCP and the `jev-agent` skill today, so agents stop repeating
-them. Capabilities every agent needs belong there; agent-specific skills stay in
-the agent's own `skills/`. The baseline sets no `prompt` and no `base_model`, as
-those are per-agent (see [Sharing and spreading](#sharing-and-spreading-extends)).
+folder — but its `mcps`, `skills` and `prompt_append` spread into each agent. It
+holds the `agentgateway` MCP, the `jev-agent` and `agent-self-eval` skills, and
+the cross-cutting review skills (`code-review`, `silent-failures`,
+`performance-web`, `performance-backend`, `refactoring`). Capabilities every
+agent needs belong there; agent-specific skills stay in the agent's own
+`skills/` or the shared library. The baseline sets no `prompt` and no
+`base_model`, as those are per-agent (see
+[Sharing and spreading](#extending-and-sharing)).
 
 ## Inheritance
 
 Every published agent extends `base`; an agent may extend another agent in turn,
-and the chain resolves recursively (a cycle is an error). Solid edges are real
-agents in the repo; the dashed edge points at an illustrative `backend` you
-could add.
+and the chain resolves recursively (a cycle is an error). The factory agents map
+to the software lifecycle, and a few extend one another.
 
 ```mermaid
 flowchart TD
-  BASE["base (publish: false)<br/>MCP: agentgateway · skill: jev-agent"]
+  BASE["base (publish: false)<br/>MCP: agentgateway<br/>skills: jev-agent, agent-self-eval, code-review,<br/>silent-failures, performance-web, performance-backend, refactoring"]
 
-  FE["Frontend"]
-  FEV["Frontend (Vue)"]
+  PROD["Product"]
+  ARCH["Architect"]
+  PLAN["Planner"]
+  DES["Designer"]
+  FE["Frontend (Vue + Nuxt)"]
+  BE["Backend (Go)"]
+  DATA["Data"]
+  CLOUD["Cloud (Cloudflare + AWS)"]
+  OPS["DevOps"]
+  SEC["Security"]
+  QA["QA"]
+  DOCS["Docs"]
+  AO["Agent Ops"]
   JEV["Jev"]
-  BE["Backend (example)"]
 
-  BASE --> FE
-  BASE --> JEV
-  BASE -.-> BE
-  FE --> FEV
-
-  FE --- FE_S["skills: accessibility-audit, design-tokens"]
-  FEV --- FEV_S["skills: + vue"]
-  BE --- BE_S["skills: + api-design"]
+  BASE --> PROD & ARCH & PLAN & DES & FE & BE & CLOUD & SEC & QA & DOCS & AO & JEV
+  BE --> DATA
+  CLOUD --> OPS
 ```
 
 Reading it:
 
 - **`base` is never picked.** `publish: false` means no Model and no folder; only
-  its `mcps`, `skills` and `params` spread to children.
-- **Skills accumulate down the chain.** `Frontend (Vue)` extends `Frontend`,
-  which extends `base`, so it carries `jev-agent` + `accessibility-audit` +
-  `design-tokens` + `vue` (union, order-preserving, deduped).
-- **The dashed edge is the example.** `Backend` is not in the repo; it shows the
-  shape a new agent takes — `extends: base`, its own `base_model`, and a local
-  `skills/api-design/` — and it inherits the gateway MCP and `jev-agent` for
-  free. The full worked example is in
+  its `mcps`, `skills` and `prompt_append` spread to children.
+- **Skills accumulate down the chain.** `Data` extends `Backend (Go)`, which
+  extends `base`, so it carries the Go, API, error and TDD skills plus
+  `postgres`, `migrations` and `data-modeling` (union, order-preserving, deduped).
+- **`reviewer`, `performance` and `refactor` are skills, not agents.** They live
+  on `base` and are invoked with the `/review`, `/perf` and `/refactor` prompts.
+- The full worked example is in
   [`workspaces/README.md`](../workspaces/README.md#adding-an-agent).
 
 ## What an agent becomes
@@ -86,6 +102,7 @@ Reading it:
 | `mcps` | the Model's bound tools (names from `workspaces/mcps/`) |
 | `tags` | Model tags |
 | `folder` | a sidebar **Folder** bound to the Model (default = agent name, `false` disables) |
+| `folder_icon` | the Folder's sidebar icon (an open-webui emoji name, e.g. `cloud`) |
 | `params` | the Model's parameters (optional) |
 | `publish` | whether a Model is created (`false` = extend-only base) |
 | `skills/<id>/SKILL.md` | a **Skill**, lazy-loaded on demand |
@@ -94,13 +111,13 @@ Reading it:
 ## Extending and sharing
 
 An agent can inherit another with `extends:` — lists spread, `params` deep-merge,
-`prompt` is replaced, and `prompt_append` is concatenated — so a specific
-"frontend-vue" agent reuses the generic "frontend" one. Every agent extends the
-shared **`base`** baseline (`publish: false`, so it is never a Model), which is
-where capabilities common to all agents live. Skills and MCPs live either
-**locally** (in the agent's folder, attached implicitly) or in the **shared**
-libraries (`workspaces/skills/`, `workspaces/mcps/`) and are pulled in by
-id/name. A local entry shadows a shared one with the same id.
+`prompt` is replaced, and `prompt_append` is concatenated — so a specific "data"
+agent reuses the "backend-go" one. Every agent extends the shared **`base`**
+baseline (`publish: false`, so it is never a Model), which is where capabilities
+common to all agents live. Skills and MCPs live either **locally** (in the
+agent's folder, attached implicitly) or in the **shared** libraries
+(`workspaces/skills/`, `workspaces/mcps/`) and are pulled in by id/name. A local
+entry shadows a shared one with the same id.
 
 The full YAML schema, merge rules and worked examples are in
 [`workspaces/README.md`](../workspaces/README.md).
